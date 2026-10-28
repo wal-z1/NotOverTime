@@ -600,7 +600,7 @@ function App() {
                 </button>
               ))}
             </div>
-            <button className="fab large" type="button" onClick={() => openCreateDialog()}>+ Add timer</button>
+            <button className="empty-add-button primary" type="button" onClick={() => openCreateDialog()}>+ Add timer</button>
           </section>
         ) : (
           <section className={`timer-grid ${settings.compactMode ? 'compact-mode' : ''}`}>
