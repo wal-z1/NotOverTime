@@ -178,6 +178,17 @@ function pauseTimersForPersistence(timers, now = Date.now()) {
   });
 }
 
+function resetTimersForLoad(timers) {
+  return timers.map((timer) => ({
+    ...timer,
+    elapsedMs: 0,
+    state: 'idle',
+    endTime: null,
+    finishedAt: null,
+    updatedAt: Date.now(),
+  }));
+}
+
 function useLocalStorageState(key, defaultValue, validate) {
   const [value, setValue] = useState(() => {
     try {
@@ -249,7 +260,7 @@ function App() {
   useEffect(() => {
     const saved = readStorage('timers', []);
     const valid = Array.isArray(saved) ? saved.filter(isValidTimer).map(sanitizeTimer) : [];
-    const safe = valid.slice(0, MAX_TIMERS);
+    const safe = resetTimersForLoad(valid.slice(0, MAX_TIMERS));
     setTimers(safe);
   }, []);
 
