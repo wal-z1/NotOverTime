@@ -59,6 +59,7 @@ function getDefaultSettings() {
     notifyOnFinish: true,
     soundVolume: 0.7,
     alarmDuration: 60,
+    compactMode: false,
     trackerColor: defaultColor,
     lastColor: defaultColor,
     lastSound: DEFAULT_SOUND,
@@ -573,9 +574,11 @@ function App() {
                       />
                       <line x1="100" y1="100" x2="100" y2="34" className="hand" style={{ transform: `rotate(${(timer.elapsedMs / timer.totalMs) * 360}deg)` }} />
                     </svg>
-                    <div className="time-block">
+                    <div className={`time-block ${settings.compactMode ? 'compact' : ''}`}>
                       <div className="remaining-time">{formatDuration(remainingMs / 1000)}</div>
-                      <div className="elapsed-total">{formatDuration(timer.elapsedMs / 1000)} / {formatDuration(timer.totalMs / 1000)}</div>
+                      {!settings.compactMode ? (
+                        <div className="elapsed-total">{formatDuration(timer.elapsedMs / 1000)} / {formatDuration(timer.totalMs / 1000)}</div>
+                      ) : null}
                     </div>
                   </div>
                   <div className="linear-progress" aria-label={`${Math.round(progress)}% complete`}>
@@ -696,6 +699,21 @@ function App() {
                 </label>
               </div>
             </div>
+
+            <label className="setting-toggle">
+              <span>
+                <strong>Compact mode</strong>
+                <small>Show only the changing time inside each ring.</small>
+              </span>
+              <button
+                type="button"
+                className="switch"
+                aria-pressed={settings.compactMode}
+                onClick={() => setSettings((current) => ({ ...current, compactMode: !current.compactMode }))}
+              >
+                <span className="switch-thumb" />
+              </button>
+            </label>
 
             <div className="dialog-actions">
               <button type="button" className="primary" onClick={() => setSettingsOpen(false)}>Done</button>
