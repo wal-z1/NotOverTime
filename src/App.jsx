@@ -585,8 +585,21 @@ function App() {
             <button
               className="switch"
               type="button"
+              aria-label="Toggle site notifications"
               aria-pressed={settings.siteNotifications}
-            onClick={toggleSiteNotifications}
+              onClick={toggleSiteNotifications}
+            >
+              <span className="switch-thumb" />
+            </button>
+          </label>
+          <label className="switch-row">
+            <span>Compact mode</span>
+            <button
+              className="switch"
+              type="button"
+              aria-label="Toggle compact mode"
+              aria-pressed={settings.compactMode}
+              onClick={() => setSettings((current) => ({ ...current, compactMode: !current.compactMode }))}
             >
               <span className="switch-thumb" />
             </button>

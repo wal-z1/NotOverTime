@@ -595,13 +595,20 @@ button:active {
   .header-actions {
     grid-column: 1;
     grid-row: 2;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto;
     gap: 6px;
     width: 100%;
-    justify-content: center;
+    align-items: stretch;
+    justify-content: stretch;
   }
 
   .switch-row span {
     display: none;
+  }
+
+  .switch-row {
+    justify-content: center;
   }
 
   .brand-wrap h1 {
@@ -609,7 +616,7 @@ button:active {
   }
 
   .icon-button {
-    flex: 1;
+    width: 100%;
     padding: 0 10px;
   }
 
