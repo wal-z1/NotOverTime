@@ -603,7 +603,7 @@ function App() {
             <button className="fab large" type="button" onClick={() => openCreateDialog()}>+ Add timer</button>
           </section>
         ) : (
-          <section className="timer-grid">
+          <section className={`timer-grid ${settings.compactMode ? 'compact-mode' : ''}`}>
             {timers.map((timer) => {
               const remainingMs = Math.max(0, timer.totalMs - timer.elapsedMs);
               const progress = clamp((timer.elapsedMs / timer.totalMs) * 100, 0, 100);
@@ -615,10 +615,12 @@ function App() {
                 <article key={timer.id} className={`timer-card ${timer.state}`}>
                   <div className="card-top">
                     <h3>{timer.name}</h3>
-                    <button type="button" className="mini-button secondary" onClick={() => openCreateDialog(timer)}>Edit</button>
+                    {!settings.compactMode ? (
+                      <button type="button" className="mini-button secondary" onClick={() => openCreateDialog(timer)}>Edit</button>
+                    ) : null}
                   </div>
 
-                  <div className="timer-visual" style={{ '--ring-color': timer.color }}>
+                  <div className={`timer-visual ${settings.compactMode ? 'compact-hidden' : ''}`} style={{ '--ring-color': timer.color }}>
                     <svg viewBox="0 0 200 200" className="timer-ring" aria-label={`${timer.name} remaining ${formatDuration(remainingMs / 1000)}`}>
                       <circle cx="100" cy="100" r={radius} className="track" />
                       <circle
@@ -662,11 +664,11 @@ function App() {
                       <div className="elapsed-total">{formatDuration(timer.elapsedMs / 1000)} / {formatDuration(timer.totalMs / 1000)}</div>
                     ) : null}
                   </div>
-                  <div className="linear-progress" aria-label={`${Math.round(progress)}% complete`}>
+                  <div className={`linear-progress ${settings.compactMode ? 'compact-hidden' : ''}`} aria-label={`${Math.round(progress)}% complete`}>
                     <span className="linear-progress-fill" style={{ width: `${progress}%`, backgroundColor: timer.color }} />
                   </div>
 
-                  <div className="actions-row">
+                  <div className={`actions-row ${settings.compactMode ? 'compact-hidden' : ''}`}>
                     {timer.state === 'running' ? (
                       <button type="button" className="primary" onClick={() => pauseTimer(timer.id)}>Pause</button>
                     ) : (
