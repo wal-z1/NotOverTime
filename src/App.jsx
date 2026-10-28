@@ -164,6 +164,7 @@ function App() {
   const [editingId, setEditingId] = useState(null);
   const [editingTimeId, setEditingTimeId] = useState(null);
   const [timeDraft, setTimeDraft] = useState('');
+  const [highlightedTimerId, setHighlightedTimerId] = useState(null);
   const [draft, setDraft] = useState({ name: '', duration: 1500, color: getDefaultTrackerColor(), sound: DEFAULT_SOUND });
   const [storageWarning, setStorageWarning] = useState(false);
   const timeInputRef = useRef(null);
@@ -172,6 +173,7 @@ function App() {
   const alarmIntervalRef = useRef(null);
   const finishNoticeRef = useRef(new Set());
   const nextRequestRef = useRef(null);
+  const timerCardRefs = useRef(new Map());
 
   const timersById = useMemo(() => Object.fromEntries(timers.map((timer) => [timer.id, timer])), [timers]);
 
@@ -508,12 +510,32 @@ function App() {
   function duplicateTimer(timerId) {
     const timer = timers.find((item) => item.id === timerId);
     if (!timer) return;
-    addTimer({
+    if (timers.length >= MAX_TIMERS) {
+      showSnackbar('Maximum of 50 timers reached.');
+      return;
+    }
+
+    const duplicateId = crypto.randomUUID();
+    const duplicate = buildTimer({
       name: `${timer.name} copy`,
       totalMs: timer.totalMs,
       color: timer.color,
       sound: timer.sound,
     });
+    duplicate.id = duplicateId;
+    setTimers((current) => [...current, duplicate]);
+    persistStorage('timers', [...timers, duplicate]);
+    setHighlightedTimerId(duplicateId);
+    window.setTimeout(() => {
+      const card = timerCardRefs.current.get(duplicateId);
+      if (!card) return;
+      const bounds = card.getBoundingClientRect();
+      const isOutsideViewport = bounds.top < 0 || bounds.bottom > window.innerHeight;
+      if (isOutsideViewport) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 0);
+    window.setTimeout(() => setHighlightedTimerId(null), 1200);
   }
 
   function clearAll() {
@@ -612,7 +634,14 @@ function App() {
               const offset = circumference * (1 - progress / 100);
 
               return (
-                <article key={timer.id} className={`timer-card ${timer.state}`}>
+                <article
+                  key={timer.id}
+                  ref={(element) => {
+                    if (element) timerCardRefs.current.set(timer.id, element);
+                    else timerCardRefs.current.delete(timer.id);
+                  }}
+                  className={`timer-card ${timer.state} ${highlightedTimerId === timer.id ? 'timer-card-highlight' : ''}`}
+                >
                   <div className="card-top">
                     <h3>{timer.name}</h3>
                     {!settings.compactMode ? (
