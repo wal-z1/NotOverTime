@@ -162,8 +162,11 @@ function App() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [editingTimeId, setEditingTimeId] = useState(null);
+  const [timeDraft, setTimeDraft] = useState('');
   const [draft, setDraft] = useState({ name: '', duration: 1500, color: getDefaultTrackerColor(), sound: DEFAULT_SOUND });
   const [storageWarning, setStorageWarning] = useState(false);
+  const timeInputRef = useRef(null);
   const tickerRef = useRef(0);
   const audioContextRef = useRef(null);
   const alarmIntervalRef = useRef(null);
@@ -287,11 +290,6 @@ function App() {
   }, [settings]);
 
   useEffect(() => {
-    if (!('Notification' in window) || !settings.siteNotifications) return;
-    Notification.requestPermission().catch(() => {});
-  }, [settings.siteNotifications]);
-
-  useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
     navigator.serviceWorker.register('/service-worker.js').catch(() => {});
   }, []);
@@ -351,6 +349,31 @@ function App() {
     setSnackbar(message);
     window.clearTimeout(showSnackbar.timer);
     showSnackbar.timer = window.setTimeout(() => setSnackbar(''), 3200);
+  }
+
+  async function toggleSiteNotifications() {
+    if (!('Notification' in window)) {
+      showSnackbar('Notifications are not supported in this browser.');
+      return;
+    }
+
+    if (Notification.permission === 'denied') {
+      showSnackbar('Notifications are blocked. Re-enable them in browser settings.');
+      return;
+    }
+
+    if (Notification.permission === 'default') {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        setSettings((current) => ({ ...current, siteNotifications: false }));
+        showSnackbar(permission === 'denied'
+          ? 'Notifications are blocked. Re-enable them in browser settings.'
+          : 'Notification permission was not granted.');
+        return;
+      }
+    }
+
+    setSettings((current) => ({ ...current, siteNotifications: !current.siteNotifications }));
   }
 
   function queueFinishNotification(timer) {
@@ -420,6 +443,40 @@ function App() {
 
   function updateTimer(timerId, updates) {
     setTimers((current) => current.map((timer) => (timer.id === timerId ? { ...timer, ...updates } : timer)));
+  }
+
+  function beginTimeEdit(timer) {
+    setEditingTimeId(timer.id);
+    setTimeDraft(formatDuration(Math.max(0, (timer.totalMs - timer.elapsedMs) / 1000)));
+    window.setTimeout(() => {
+      timeInputRef.current?.focus();
+      timeInputRef.current?.select();
+    }, 0);
+  }
+
+  function cancelTimeEdit() {
+    setEditingTimeId(null);
+    setTimeDraft('');
+  }
+
+  function saveTimeEdit(timer) {
+    const remainingSeconds = parseDurationInput(timeDraft);
+    if (remainingSeconds <= 0) {
+      showSnackbar('Enter a duration greater than zero.');
+      return;
+    }
+
+    const remainingMs = remainingSeconds * 1000;
+    const totalMs = clamp(timer.elapsedMs + remainingMs, 1000, 99 * 60 * 60 * 1000);
+    const normalizedRemainingMs = totalMs - timer.elapsedMs;
+    updateTimer(timer.id, {
+      totalMs,
+      endTime: timer.state === 'running' ? Date.now() + normalizedRemainingMs : null,
+      state: timer.state === 'finished' ? 'paused' : timer.state,
+      finishedAt: null,
+      updatedAt: Date.now(),
+    });
+    cancelTimeEdit();
   }
 
   function startTimer(timerId) {
@@ -507,7 +564,7 @@ function App() {
               className="switch"
               type="button"
               aria-pressed={settings.siteNotifications}
-              onClick={() => setSettings((current) => ({ ...current, siteNotifications: !current.siteNotifications }))}
+            onClick={toggleSiteNotifications}
             >
               <span className="switch-thumb" />
             </button>
@@ -574,12 +631,36 @@ function App() {
                       />
                       <line x1="100" y1="100" x2="100" y2="34" className="hand" style={{ transform: `rotate(${(timer.elapsedMs / timer.totalMs) * 360}deg)` }} />
                     </svg>
-                    <div className={`time-block ${settings.compactMode ? 'compact' : ''}`}>
-                      <div className="remaining-time">{formatDuration(remainingMs / 1000)}</div>
-                      {!settings.compactMode ? (
-                        <div className="elapsed-total">{formatDuration(timer.elapsedMs / 1000)} / {formatDuration(timer.totalMs / 1000)}</div>
-                      ) : null}
-                    </div>
+                  </div>
+                  <div className={`time-editor ${settings.compactMode ? 'compact' : ''}`}>
+                    {editingTimeId === timer.id ? (
+                      <input
+                        ref={timeInputRef}
+                        className="time-input"
+                        type="text"
+                        inputMode="numeric"
+                        aria-label={`Edit ${timer.name} remaining time`}
+                        value={timeDraft}
+                        onChange={(event) => setTimeDraft(event.target.value)}
+                        onBlur={() => saveTimeEdit(timer)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') saveTimeEdit(timer);
+                          if (event.key === 'Escape') cancelTimeEdit();
+                        }}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className="remaining-time"
+                        aria-label={`Edit ${timer.name} remaining time`}
+                        onClick={() => beginTimeEdit(timer)}
+                      >
+                        {formatDuration(remainingMs / 1000)}
+                      </button>
+                    )}
+                    {!settings.compactMode ? (
+                      <div className="elapsed-total">{formatDuration(timer.elapsedMs / 1000)} / {formatDuration(timer.totalMs / 1000)}</div>
+                    ) : null}
                   </div>
                   <div className="linear-progress" aria-label={`${Math.round(progress)}% complete`}>
                     <span className="linear-progress-fill" style={{ width: `${progress}%`, backgroundColor: timer.color }} />
