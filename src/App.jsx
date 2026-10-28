@@ -66,6 +66,23 @@ function getDurationMultiplier(unit) {
   return unit === 'hours' ? 3600 : unit === 'minutes' ? 60 : 1;
 }
 
+function Icon({ name }) {
+  const paths = {
+    play: <path d="M8 5v14l11-7L8 5Z" />,
+    pause: <path d="M7 5h3v14H7zM14 5h3v14h-3z" />,
+    reset: <path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6M4 4v4.6h4.6" />,
+    edit: <path d="m4 16.8-.8 3.9 3.9-.8L18.6 8.4a2.1 2.1 0 0 0-3-3L4 16.8Z" />,
+    duplicate: <path d="M8 8h11v12H8zM5 16H3V3h13v2" />,
+    trash: <path d="M5 7h14M10 11v5m4-5v5M8 7l1-3h6l1 3m-9 0 1 13h8l1-13" />,
+  };
+
+  return (
+    <svg className="button-icon" viewBox="0 0 24 24" aria-hidden="true">
+      {paths[name]}
+    </svg>
+  );
+}
+
 function getDefaultSettings() {
   const defaultColor = getDefaultTrackerColor();
   return {
@@ -741,6 +758,44 @@ function App() {
                     <button type="button" className="secondary" onClick={() => resetTimer(timer.id)}>Reset</button>
                     <button type="button" className="secondary" onClick={() => duplicateTimer(timer.id)}>Duplicate</button>
                     <button type="button" className="danger" onClick={() => removeTimer(timer.id)}>Delete</button>
+                  </div>
+                  <div className="compact-actions">
+                    <button
+                      type="button"
+                      className="compact-icon-button primary"
+                      aria-label={timer.state === 'running' ? `Pause ${timer.name}` : `Start ${timer.name}`}
+                      title={timer.state === 'running' ? 'Pause' : 'Start'}
+                      onClick={() => timer.state === 'running' ? pauseTimer(timer.id) : startTimer(timer.id)}
+                    >
+                      <Icon name={timer.state === 'running' ? 'pause' : 'play'} />
+                    </button>
+                    <button
+                      type="button"
+                      className="compact-icon-button secondary"
+                      aria-label={`Reset ${timer.name}`}
+                      title="Reset"
+                      onClick={() => resetTimer(timer.id)}
+                    >
+                      <Icon name="reset" />
+                    </button>
+                    <button
+                      type="button"
+                      className="compact-icon-button secondary"
+                      aria-label={`Edit ${timer.name}`}
+                      title="Edit"
+                      onClick={() => openCreateDialog(timer)}
+                    >
+                      <Icon name="edit" />
+                    </button>
+                    <button
+                      type="button"
+                      className="compact-icon-button danger"
+                      aria-label={`Delete ${timer.name}`}
+                      title="Delete"
+                      onClick={() => removeTimer(timer.id)}
+                    >
+                      <Icon name="trash" />
+                    </button>
                   </div>
                 </article>
               );

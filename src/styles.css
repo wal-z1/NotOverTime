@@ -208,7 +208,7 @@ button:active {
 
 .timer-grid.compact-mode .timer-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 16px;
   padding: 10px 12px;
@@ -236,6 +236,41 @@ button:active {
 .timer-grid.compact-mode .remaining-time {
   width: auto;
   font-size: 1.15rem;
+}
+
+.compact-actions {
+  display: none;
+}
+
+.timer-grid.compact-mode .compact-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.compact-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--outline);
+}
+
+.button-icon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.compact-icon-button.primary .button-icon {
+  fill: currentColor;
+  stroke: currentColor;
 }
 
 .timer-grid.compact-mode .compact-hidden {
@@ -633,5 +668,15 @@ button:active {
 
   .timer-grid {
     grid-template-columns: 1fr;
+  }
+
+  .timer-grid.compact-mode .timer-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .timer-grid.compact-mode .compact-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
   }
 }
