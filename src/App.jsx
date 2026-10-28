@@ -3,14 +3,21 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 const STORAGE_PREFIX = 'timers.v1';
 const MAX_TIMERS = 50;
 const DEFAULT_SOUND = 'Beep';
-const DEFAULT_COLOR = '#7c4dff';
+const LIGHT_DEFAULT_COLOR = '#6750a4';
+const DARK_DEFAULT_COLOR = '#d0bcff';
 const DEMO_PRESETS = [
   { name: 'Focus 25', seconds: 25 * 60 },
   { name: 'Break 5', seconds: 5 * 60 },
   { name: 'Deep Work 50', seconds: 50 * 60 },
   { name: 'Walk 10', seconds: 10 * 60 },
 ];
-const TRACKER_COLORS = ['#7c4dff', '#ff6f61', '#ff9800', '#4caf50', '#2196f3', '#e91e63', '#00acc1'];
+function getDefaultTrackerColor() {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+    ? DARK_DEFAULT_COLOR
+    : LIGHT_DEFAULT_COLOR;
+}
+
+const TRACKER_COLORS = [getDefaultTrackerColor(), '#ff6f61', '#ff9800', '#4caf50', '#2196f3', '#e91e63', '#00acc1'];
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -45,14 +52,15 @@ function parseDurationInput(raw) {
 }
 
 function getDefaultSettings() {
+  const defaultColor = getDefaultTrackerColor();
   return {
     theme: 'system',
     siteNotifications: false,
     notifyOnFinish: true,
     soundVolume: 0.7,
     alarmDuration: 60,
-    trackerColor: DEFAULT_COLOR,
-    lastColor: DEFAULT_COLOR,
+    trackerColor: defaultColor,
+    lastColor: defaultColor,
     lastSound: DEFAULT_SOUND,
     wakeLock: true,
   };
@@ -85,7 +93,7 @@ function sanitizeTimer(timer) {
     name: String(timer.name || 'Timer'),
     totalMs,
     elapsedMs,
-    color: String(timer.color || DEFAULT_COLOR),
+    color: String(timer.color || getDefaultTrackerColor()),
     sound: String(timer.sound || DEFAULT_SOUND),
     state: timer.state === 'running' || timer.state === 'paused' || timer.state === 'finished' ? timer.state : 'idle',
     endTime: typeof timer.endTime === 'number' ? timer.endTime : null,
@@ -100,7 +108,7 @@ function buildTimer({ name, totalMs, color, sound }) {
     name: String(name || 'Timer'),
     totalMs: clamp(Math.round(totalMs || 0), 1000, 99 * 60 * 60 * 1000),
     elapsedMs: 0,
-    color: color || DEFAULT_COLOR,
+    color: color || getDefaultTrackerColor(),
     sound: sound || DEFAULT_SOUND,
     state: 'idle',
     endTime: null,
@@ -138,7 +146,13 @@ function App() {
     try {
       const stored = localStorage.getItem(`${STORAGE_PREFIX}.settings`);
       if (!stored) return getDefaultSettings();
-      return { ...getDefaultSettings(), ...safeParse(stored, getDefaultSettings()) };
+      const parsed = safeParse(stored, {});
+      return {
+        ...getDefaultSettings(),
+        ...parsed,
+        trackerColor: parsed.trackerColor || getDefaultTrackerColor(),
+        lastColor: parsed.lastColor || parsed.trackerColor || getDefaultTrackerColor(),
+      };
     } catch {
       return getDefaultSettings();
     }
@@ -147,7 +161,7 @@ function App() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [draft, setDraft] = useState({ name: '', duration: 1500, color: DEFAULT_COLOR, sound: DEFAULT_SOUND });
+  const [draft, setDraft] = useState({ name: '', duration: 1500, color: getDefaultTrackerColor(), sound: DEFAULT_SOUND });
   const [storageWarning, setStorageWarning] = useState(false);
   const tickerRef = useRef(0);
   const audioContextRef = useRef(null);
@@ -384,7 +398,7 @@ function App() {
     setDraft({
       name: timer ? timer.name : '',
       duration: timer ? timer.totalMs / 1000 : 1500,
-      color: timer ? timer.color : settings.lastColor || settings.trackerColor || DEFAULT_COLOR,
+      color: timer ? timer.color : settings.lastColor || settings.trackerColor || getDefaultTrackerColor(),
       sound: timer ? timer.sound : settings.lastSound || DEFAULT_SOUND,
     });
     setDialogOpen(true);
@@ -396,7 +410,7 @@ function App() {
       return;
     }
 
-    const resolvedColor = timerData.color || settings.trackerColor || DEFAULT_COLOR;
+    const resolvedColor = timerData.color || settings.trackerColor || getDefaultTrackerColor();
     const newTimer = buildTimer({ ...timerData, color: resolvedColor });
     setTimers((current) => [...current, newTimer]);
     persistStorage('timers', [...timers, newTimer]);
@@ -522,7 +536,7 @@ function App() {
                   key={preset.name}
                   type="button"
                   className="preset-button"
-                  onClick={() => addTimer({ name: preset.name, totalMs: preset.seconds * 1000, color: settings.trackerColor || DEFAULT_COLOR, sound: DEFAULT_SOUND })}
+                  onClick={() => addTimer({ name: preset.name, totalMs: preset.seconds * 1000, color: settings.trackerColor || getDefaultTrackerColor(), sound: DEFAULT_SOUND })}
                 >
                   {preset.name}
                 </button>
@@ -543,7 +557,7 @@ function App() {
                 <article key={timer.id} className={`timer-card ${timer.state}`}>
                   <div className="card-top">
                     <h3>{timer.name}</h3>
-                    <button type="button" className="mini-button" onClick={() => openCreateDialog(timer)}>Edit</button>
+                    <button type="button" className="mini-button secondary" onClick={() => openCreateDialog(timer)}>Edit</button>
                   </div>
 
                   <div className="timer-visual" style={{ '--ring-color': timer.color }}>
@@ -567,13 +581,13 @@ function App() {
 
                   <div className="actions-row">
                     {timer.state === 'running' ? (
-                      <button type="button" onClick={() => pauseTimer(timer.id)}>Pause</button>
+                      <button type="button" className="primary" onClick={() => pauseTimer(timer.id)}>Pause</button>
                     ) : (
-                      <button type="button" onClick={() => startTimer(timer.id)}>{timer.state === 'finished' ? 'Restart' : 'Start'}</button>
+                      <button type="button" className="primary" onClick={() => startTimer(timer.id)}>{timer.state === 'finished' ? 'Restart' : 'Start'}</button>
                     )}
-                    <button type="button" onClick={() => resetTimer(timer.id)}>Reset</button>
-                    <button type="button" onClick={() => duplicateTimer(timer.id)}>Duplicate</button>
-                    <button type="button" onClick={() => removeTimer(timer.id)}>Delete</button>
+                    <button type="button" className="secondary" onClick={() => resetTimer(timer.id)}>Reset</button>
+                    <button type="button" className="secondary" onClick={() => duplicateTimer(timer.id)}>Duplicate</button>
+                    <button type="button" className="danger" onClick={() => removeTimer(timer.id)}>Delete</button>
                   </div>
                 </article>
               );
@@ -610,6 +624,7 @@ function App() {
                     <button
                       key={color}
                       type="button"
+                      aria-label={`Use ${color} progress color`}
                       className={`swatch ${draft.color === color ? 'selected' : ''}`}
                       style={{ background: color }}
                       onClick={() => setDraft((current) => ({ ...current, color }))}
@@ -618,7 +633,8 @@ function App() {
                   <label className="custom-color-picker" title="Custom color">
                     <input
                       type="color"
-                      value={draft.color || settings.trackerColor || DEFAULT_COLOR}
+                      aria-label="Choose a custom progress color"
+                      value={draft.color || settings.trackerColor || getDefaultTrackerColor()}
                       onChange={(event) => setDraft((current) => ({ ...current, color: event.target.value }))}
                     />
                   </label>
@@ -658,6 +674,7 @@ function App() {
                   <button
                     key={color}
                     type="button"
+                    aria-label={`Use ${color} progress color`}
                     className={`swatch ${settings.trackerColor === color ? 'selected' : ''}`}
                     style={{ background: color }}
                     onClick={() => { setSettings((current) => ({ ...current, trackerColor: color, lastColor: color })); setSettingsOpen(false); }}
@@ -666,7 +683,8 @@ function App() {
                 <label className="custom-color-picker" title="Custom color">
                   <input
                     type="color"
-                    value={settings.trackerColor || DEFAULT_COLOR}
+                    aria-label="Choose a custom progress color"
+                    value={settings.trackerColor || getDefaultTrackerColor()}
                     onChange={(event) => {
                       const color = event.target.value;
                       setSettings((current) => ({ ...current, trackerColor: color, lastColor: color }));

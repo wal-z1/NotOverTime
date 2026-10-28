@@ -6,8 +6,9 @@
   --muted: #5f6368;
   --outline: rgba(0, 0, 0, 0.12);
   --shadow: rgba(0, 0, 0, 0.12);
-  --primary: #7c4dff;
-  --primary-strong: #5e35b1;
+  --primary: #6750a4;
+  --primary-strong: #4f378b;
+  --on-primary: #ffffff;
   --ring-track: rgba(0, 0, 0, 0.08);
   --success: #2e7d32;
   --danger: #d32f2f;
@@ -21,8 +22,9 @@
   --muted: #b7bcc2;
   --outline: rgba(255, 255, 255, 0.12);
   --shadow: rgba(0, 0, 0, 0.35);
-  --primary: #b392ff;
-  --primary-strong: #8f73ff;
+  --primary: #d0bcff;
+  --primary-strong: #a88bdb;
+  --on-primary: #241538;
   --ring-track: rgba(255, 255, 255, 0.08);
   --success: #81c784;
   --danger: #ef9a9a;
@@ -54,11 +56,21 @@ button {
   color: var(--text);
   cursor: pointer;
   border-radius: 0;
+  touch-action: manipulation;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
 }
 
 button:focus-visible, input:focus-visible, select:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
+}
+
+button:hover {
+  filter: brightness(0.97);
+}
+
+button:active {
+  transform: translateY(1px);
 }
 
 .app-header {
@@ -86,6 +98,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .switch-row {
@@ -100,7 +113,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   position: relative;
   width: 52px;
   height: 32px;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--surface-strong);
   border: 1px solid var(--outline);
   transition: background 180ms ease;
@@ -116,7 +129,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   left: 5px;
   width: 20px;
   height: 20px;
-  border-radius: 50%;
+  border-radius: 0;
   background: #fff;
   box-shadow: 0 1px 3px rgba(0,0,0,0.18);
   transition: transform 180ms ease;
@@ -127,7 +140,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 
 .icon-button {
-  min-height: 48px;
+  min-height: 44px;
   padding: 0 16px;
   background: var(--surface-strong);
   border: 1px solid var(--outline);
@@ -173,6 +186,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   border: 1px solid var(--outline);
   box-shadow: 0 2px 6px var(--shadow);
   padding: 16px;
+  min-width: 0;
 }
 
 .timer-card.finished {
@@ -191,12 +205,15 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   margin: 0;
   font-size: 1.1rem;
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mini-button {
-  background: var(--surface-strong);
-  border: 1px solid var(--outline);
-  padding: 8px 10px;
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 14px;
 }
 
 .timer-visual {
@@ -260,8 +277,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 
 .actions-row button {
-  min-height: 44px;
-  background: var(--surface-strong);
+  min-height: 48px;
   border: 1px solid var(--outline);
 }
 
@@ -269,11 +285,11 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   position: fixed;
   right: max(16px, env(safe-area-inset-right));
   bottom: max(16px, env(safe-area-inset-bottom));
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  border-radius: 0;
   background: var(--primary);
-  color: white;
+  color: var(--on-primary);
   box-shadow: 0 4px 12px rgba(0,0,0,0.25);
   font-size: 2.2rem;
   z-index: 30;
@@ -282,7 +298,6 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .fab.large {
   width: 120px;
   height: 52px;
-  border-radius: 999px;
   font-size: 1rem;
 }
 
@@ -318,7 +333,6 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .close-button {
   width: 36px;
   height: 36px;
-  border-radius: 50%;
   background: var(--surface-strong);
 }
 
@@ -393,18 +407,25 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 
 .dialog-actions button {
-  min-height: 44px;
+  min-height: 48px;
   padding: 0 18px;
 }
 
 .primary {
   background: var(--primary);
-  color: white;
+  color: var(--on-primary);
+  border: 1px solid var(--primary);
 }
 
 .secondary {
   background: var(--surface-strong);
   border: 1px solid var(--outline);
+}
+
+.danger {
+  background: transparent;
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
 }
 
 .snackbar {
@@ -417,19 +438,28 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   padding: 12px 16px;
   box-shadow: 0 4px 8px rgba(0,0,0,0.2);
   z-index: 60;
+  max-width: min(90vw, 520px);
+  text-align: center;
 }
 
 @media (max-width: 640px) {
   .app-header {
-    padding: 10px 12px;
+    align-items: flex-start;
+    padding: 12px;
   }
 
   .header-actions {
     gap: 6px;
+    flex: 1;
   }
 
   .switch-row span {
     display: none;
+  }
+
+  .icon-button {
+    flex: 1;
+    padding: 0 10px;
   }
 
   .timer-grid {
