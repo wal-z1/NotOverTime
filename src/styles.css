@@ -493,6 +493,17 @@ button:active {
   min-height: 48px;
 }
 
+.duration-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  gap: 8px;
+}
+
+.duration-input-row input,
+.duration-input-row select {
+  min-width: 0;
+}
+
 .swatch-row {
   display: flex;
   gap: 8px;

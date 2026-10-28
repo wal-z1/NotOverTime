@@ -51,6 +51,21 @@ function parseDurationInput(raw) {
   return clamp(total, 0, 99 * 3600 + 59 * 60 + 59);
 }
 
+function getDurationUnit(seconds) {
+  if (seconds % 3600 === 0) return 'hours';
+  if (seconds % 60 === 0) return 'minutes';
+  return 'seconds';
+}
+
+function getDurationValue(seconds, unit) {
+  const divisor = unit === 'hours' ? 3600 : unit === 'minutes' ? 60 : 1;
+  return seconds / divisor;
+}
+
+function getDurationMultiplier(unit) {
+  return unit === 'hours' ? 3600 : unit === 'minutes' ? 60 : 1;
+}
+
 function getDefaultSettings() {
   const defaultColor = getDefaultTrackerColor();
   return {
@@ -165,7 +180,7 @@ function App() {
   const [editingTimeId, setEditingTimeId] = useState(null);
   const [timeDraft, setTimeDraft] = useState('');
   const [highlightedTimerId, setHighlightedTimerId] = useState(null);
-  const [draft, setDraft] = useState({ name: '', duration: 1500, color: getDefaultTrackerColor(), sound: DEFAULT_SOUND });
+  const [draft, setDraft] = useState({ name: '', duration: 25, durationUnit: 'minutes', color: getDefaultTrackerColor(), sound: DEFAULT_SOUND });
   const [storageWarning, setStorageWarning] = useState(false);
   const timeInputRef = useRef(null);
   const tickerRef = useRef(0);
@@ -420,10 +435,13 @@ function App() {
 
   function openCreateDialog(initialTimer = null) {
     const timer = initialTimer || null;
+    const durationSeconds = timer ? timer.totalMs / 1000 : 25 * 60;
+    const durationUnit = timer ? getDurationUnit(durationSeconds) : 'minutes';
     setEditingId(timer ? timer.id : null);
     setDraft({
       name: timer ? timer.name : '',
-      duration: timer ? timer.totalMs / 1000 : 1500,
+      duration: getDurationValue(durationSeconds, durationUnit),
+      durationUnit,
       color: timer ? timer.color : settings.lastColor || settings.trackerColor || getDefaultTrackerColor(),
       sound: timer ? timer.sound : settings.lastSound || DEFAULT_SOUND,
     });
@@ -545,7 +563,11 @@ function App() {
 
   function handleSubmit(event) {
     event.preventDefault();
-    const totalSeconds = clamp(Math.round(Number(draft.duration) || 0), 1, 99 * 3600 + 59 * 60 + 59);
+    const totalSeconds = clamp(
+      Math.round((Number(draft.duration) || 0) * getDurationMultiplier(draft.durationUnit || 'minutes')),
+      1,
+      99 * 3600 + 59 * 60 + 59
+    );
     if (!editingId) {
       addTimer({
         name: draft.name.trim() || `Timer ${timers.length + 1}`,
@@ -745,10 +767,35 @@ function App() {
                 <input type="text" value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
               </label>
 
-              <label className="field">
+              <div className="field">
                 <span>Duration</span>
-                <input type="text" inputMode="numeric" value={draft.duration} onChange={(event) => setDraft((current) => ({ ...current, duration: event.target.value }))} />
-              </label>
+                <div className="duration-input-row">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={draft.duration}
+                    onChange={(event) => setDraft((current) => ({ ...current, duration: event.target.value }))}
+                  />
+                  <select
+                    aria-label="Duration unit"
+                    value={draft.durationUnit || 'minutes'}
+                    onChange={(event) => setDraft((current) => {
+                      const oldMultiplier = getDurationMultiplier(current.durationUnit || 'minutes');
+                      const seconds = (Number(current.duration) || 0) * oldMultiplier;
+                      const nextUnit = event.target.value;
+                      return {
+                        ...current,
+                        durationUnit: nextUnit,
+                        duration: getDurationValue(seconds, nextUnit),
+                      };
+                    })}
+                  >
+                    <option value="seconds">Seconds</option>
+                    <option value="minutes">Minutes</option>
+                    <option value="hours">Hours</option>
+                  </select>
+                </div>
+              </div>
 
               <div className="field">
                 <span>Progress color</span>
