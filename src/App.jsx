@@ -685,7 +685,9 @@ function App() {
         )}
       </main>
 
-      <button className="fab" type="button" aria-label="Create timer" onClick={() => openCreateDialog()}>+</button>
+      {timers.length > 0 ? (
+        <button className="fab" type="button" aria-label="Create timer" onClick={() => openCreateDialog()}>+</button>
+      ) : null}
 
       {dialogOpen ? (
         <div className="dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="timer-dialog-title">
