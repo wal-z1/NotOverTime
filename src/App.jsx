@@ -66,6 +66,12 @@ function getDurationMultiplier(unit) {
   return unit === 'hours' ? 3600 : unit === 'minutes' ? 60 : 1;
 }
 
+function getDurationMilliseconds(value, unit) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) return 0;
+  return Math.round(numericValue * getDurationMultiplier(unit) * 1000);
+}
+
 function Icon({ name }) {
   const paths = {
     play: <path d="M8 5v14l11-7L8 5Z" />,
@@ -148,6 +154,28 @@ function buildTimer({ name, totalMs, color, sound }) {
     updatedAt: Date.now(),
     finishedAt: null,
   };
+}
+
+function pauseTimersForPersistence(timers, now = Date.now()) {
+  return timers.map((timer) => {
+    if (timer.state !== 'running' || !timer.endTime) return timer;
+
+    const elapsedMs = clamp(
+      timer.totalMs - Math.max(0, timer.endTime - now),
+      0,
+      timer.totalMs
+    );
+    const finished = elapsedMs >= timer.totalMs;
+
+    return {
+      ...timer,
+      elapsedMs,
+      state: finished ? 'finished' : 'paused',
+      endTime: null,
+      finishedAt: finished ? (timer.finishedAt || now) : null,
+      updatedAt: now,
+    };
+  });
 }
 
 function useLocalStorageState(key, defaultValue, validate) {
@@ -310,12 +338,19 @@ function App() {
     };
 
     const debounced = setTimeout(persistTimers, 150);
-    const onPageHide = () => persistTimers();
-    document.addEventListener('visibilitychange', onPageHide);
+    const onPageHide = () => {
+      try {
+        localStorage.setItem(
+          `${STORAGE_PREFIX}.timers`,
+          JSON.stringify(pauseTimersForPersistence(timers))
+        );
+      } catch {
+        setStorageWarning(true);
+      }
+    };
     window.addEventListener('pagehide', onPageHide);
     return () => {
       clearTimeout(debounced);
-      document.removeEventListener('visibilitychange', onPageHide);
       window.removeEventListener('pagehide', onPageHide);
     };
   }, [timers]);
@@ -533,8 +568,11 @@ function App() {
   function pauseTimer(timerId) {
     setTimers((current) => current.map((timer) => {
       if (timer.id !== timerId || timer.state !== 'running') return timer;
-      const elapsedMs = Math.min(timer.elapsedMs + (timer.endTime ? Math.max(0, timer.endTime - Date.now()) : 0), timer.totalMs);
-      const remainingMs = timer.totalMs - elapsedMs;
+      const elapsedMs = clamp(
+        timer.totalMs - (timer.endTime ? Math.max(0, timer.endTime - Date.now()) : 0),
+        0,
+        timer.totalMs
+      );
       return { ...timer, elapsedMs, state: 'paused', endTime: null, totalMs: timer.totalMs, updatedAt: Date.now() };
     }));
   }
@@ -585,15 +623,15 @@ function App() {
 
   function handleSubmit(event) {
     event.preventDefault();
-    const totalSeconds = clamp(
-      Math.round((Number(draft.duration) || 0) * getDurationMultiplier(draft.durationUnit || 'minutes')),
-      1,
-      99 * 3600 + 59 * 60 + 59
+    const totalMs = clamp(
+      getDurationMilliseconds(draft.duration, draft.durationUnit || 'minutes'),
+      1000,
+      99 * 60 * 60 * 1000
     );
     if (!editingId) {
       addTimer({
         name: draft.name.trim() || `Timer ${timers.length + 1}`,
-        totalMs: totalSeconds * 1000,
+        totalMs,
         color: draft.color,
         sound: draft.sound,
       });
@@ -607,10 +645,10 @@ function App() {
       return {
         ...timer,
         name: safeName,
-        totalMs: totalSeconds * 1000,
+        totalMs,
         color: draft.color,
         sound: draft.sound,
-        elapsedMs: clamp(timer.elapsedMs, 0, totalSeconds * 1000),
+        elapsedMs: clamp(timer.elapsedMs, 0, totalMs),
         state: timer.state === 'finished' ? 'finished' : timer.state,
       };
     }));
@@ -833,8 +871,10 @@ function App() {
                 <span>Duration</span>
                 <div className="duration-input-row">
                   <input
-                    type="text"
+                    type="number"
                     inputMode="decimal"
+                    min="0"
+                    step="any"
                     value={draft.duration}
                     onChange={(event) => setDraft((current) => ({ ...current, duration: event.target.value }))}
                   />
