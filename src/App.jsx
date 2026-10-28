@@ -10,6 +10,7 @@ const DEMO_PRESETS = [
   { name: 'Deep Work 50', seconds: 50 * 60 },
   { name: 'Walk 10', seconds: 10 * 60 },
 ];
+const TRACKER_COLORS = ['#7c4dff', '#ff6f61', '#ff9800', '#4caf50', '#2196f3', '#e91e63', '#00acc1'];
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -50,6 +51,7 @@ function getDefaultSettings() {
     notifyOnFinish: true,
     soundVolume: 0.7,
     alarmDuration: 60,
+    trackerColor: DEFAULT_COLOR,
     lastColor: DEFAULT_COLOR,
     lastSound: DEFAULT_SOUND,
     wakeLock: true,
@@ -143,6 +145,7 @@ function App() {
   });
   const [snackbar, setSnackbar] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState({ name: '', duration: 1500, color: DEFAULT_COLOR, sound: DEFAULT_SOUND });
   const [storageWarning, setStorageWarning] = useState(false);
@@ -381,7 +384,7 @@ function App() {
     setDraft({
       name: timer ? timer.name : '',
       duration: timer ? timer.totalMs / 1000 : 1500,
-      color: timer ? timer.color : settings.lastColor || DEFAULT_COLOR,
+      color: timer ? timer.color : settings.lastColor || settings.trackerColor || DEFAULT_COLOR,
       sound: timer ? timer.sound : settings.lastSound || DEFAULT_SOUND,
     });
     setDialogOpen(true);
@@ -393,10 +396,11 @@ function App() {
       return;
     }
 
-    const newTimer = buildTimer(timerData);
+    const resolvedColor = timerData.color || settings.trackerColor || DEFAULT_COLOR;
+    const newTimer = buildTimer({ ...timerData, color: resolvedColor });
     setTimers((current) => [...current, newTimer]);
     persistStorage('timers', [...timers, newTimer]);
-    setSettings((current) => ({ ...current, lastColor: timerData.color || DEFAULT_COLOR, lastSound: timerData.sound || DEFAULT_SOUND }));
+    setSettings((current) => ({ ...current, trackerColor: resolvedColor, lastColor: resolvedColor, lastSound: timerData.sound || current.lastSound || DEFAULT_SOUND }));
   }
 
   function updateTimer(timerId, updates) {
@@ -493,7 +497,7 @@ function App() {
               <span className="switch-thumb" />
             </button>
           </label>
-          <button className="icon-button" type="button" aria-label="Open settings">
+          <button className="icon-button" type="button" aria-label="Open settings" onClick={() => setSettingsOpen(true)}>
             Settings
           </button>
           <button
@@ -518,7 +522,7 @@ function App() {
                   key={preset.name}
                   type="button"
                   className="preset-button"
-                  onClick={() => addTimer({ name: preset.name, totalMs: preset.seconds * 1000, color: DEFAULT_COLOR, sound: DEFAULT_SOUND })}
+                  onClick={() => addTimer({ name: preset.name, totalMs: preset.seconds * 1000, color: settings.trackerColor || DEFAULT_COLOR, sound: DEFAULT_SOUND })}
                 >
                   {preset.name}
                 </button>
@@ -599,16 +603,26 @@ function App() {
                 <input type="text" inputMode="numeric" value={draft.duration} onChange={(event) => setDraft((current) => ({ ...current, duration: event.target.value }))} />
               </label>
 
-              <div className="swatch-row">
-                {['#7c4dff', '#ff6f61', '#ff9800', '#4caf50', '#2196f3', '#e91e63'].map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    className={`swatch ${draft.color === color ? 'selected' : ''}`}
-                    style={{ background: color }}
-                    onClick={() => setDraft((current) => ({ ...current, color }))}
-                  />
-                ))}
+              <div className="field">
+                <span>Progress color</span>
+                <div className="swatch-row">
+                  {TRACKER_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className={`swatch ${draft.color === color ? 'selected' : ''}`}
+                      style={{ background: color }}
+                      onClick={() => setDraft((current) => ({ ...current, color }))}
+                    />
+                  ))}
+                  <label className="custom-color-picker" title="Custom color">
+                    <input
+                      type="color"
+                      value={draft.color || settings.trackerColor || DEFAULT_COLOR}
+                      onChange={(event) => setDraft((current) => ({ ...current, color: event.target.value }))}
+                    />
+                  </label>
+                </div>
               </div>
 
               <label className="field">
@@ -625,6 +639,46 @@ function App() {
                 <button type="submit" className="primary">{editingId ? 'Save' : 'Create'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+
+      {settingsOpen ? (
+        <div className="dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title">
+          <div className="dialog-panel settings-panel">
+            <div className="dialog-header">
+              <h2 id="settings-dialog-title">Settings</h2>
+              <button type="button" className="close-button" onClick={() => setSettingsOpen(false)}>×</button>
+            </div>
+
+            <div className="field">
+              <span>Tracker progress color</span>
+              <div className="swatch-row compact">
+                {TRACKER_COLORS.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className={`swatch ${settings.trackerColor === color ? 'selected' : ''}`}
+                    style={{ background: color }}
+                    onClick={() => { setSettings((current) => ({ ...current, trackerColor: color, lastColor: color })); setSettingsOpen(false); }}
+                  />
+                ))}
+                <label className="custom-color-picker" title="Custom color">
+                  <input
+                    type="color"
+                    value={settings.trackerColor || DEFAULT_COLOR}
+                    onChange={(event) => {
+                      const color = event.target.value;
+                      setSettings((current) => ({ ...current, trackerColor: color, lastColor: color }));
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="dialog-actions">
+              <button type="button" className="primary" onClick={() => setSettingsOpen(false)}>Done</button>
+            </div>
           </div>
         </div>
       ) : null}
