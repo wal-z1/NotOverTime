@@ -6,8 +6,8 @@
   --muted: #5f6368;
   --outline: rgba(0, 0, 0, 0.12);
   --shadow: rgba(0, 0, 0, 0.12);
-  --primary: #6750a4;
-  --primary-strong: #4f378b;
+  --primary: #2e7d32;
+  --primary-strong: #1b5e20;
   --on-primary: #ffffff;
   --ring-track: rgba(0, 0, 0, 0.08);
   --success: #2e7d32;
@@ -22,9 +22,9 @@
   --muted: #b7bcc2;
   --outline: rgba(255, 255, 255, 0.12);
   --shadow: rgba(0, 0, 0, 0.35);
-  --primary: #d0bcff;
-  --primary-strong: #a88bdb;
-  --on-primary: #241538;
+  --primary: #81c784;
+  --primary-strong: #4caf50;
+  --on-primary: #102313;
   --ring-track: rgba(255, 255, 255, 0.08);
   --success: #81c784;
   --danger: #ef9a9a;
@@ -88,9 +88,16 @@ button:active {
   box-shadow: 0 1px 2px var(--shadow);
 }
 
+.brand-wrap {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
 .brand-wrap h1 {
   margin: 0;
   font-size: clamp(1.2rem, 2vw, 2rem);
+  white-space: nowrap;
 }
 
 .header-actions {
@@ -222,7 +229,7 @@ button:active {
   place-items: center;
   width: 100%;
   min-height: 220px;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 .timer-ring {
@@ -268,6 +275,21 @@ button:active {
   margin-top: 4px;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.linear-progress {
+  width: 100%;
+  height: 8px;
+  margin-bottom: 18px;
+  overflow: hidden;
+  background: var(--ring-track);
+}
+
+.linear-progress-fill {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  transition: width 0.25s ease;
 }
 
 .actions-row {
@@ -444,17 +466,28 @@ button:active {
 
 @media (max-width: 640px) {
   .app-header {
-    align-items: flex-start;
+    align-items: center;
+    flex-direction: column;
     padding: 12px;
+  }
+
+  .brand-wrap {
+    position: static;
+    transform: none;
   }
 
   .header-actions {
     gap: 6px;
-    flex: 1;
+    width: 100%;
+    justify-content: center;
   }
 
   .switch-row span {
     display: none;
+  }
+
+  .brand-wrap h1 {
+    font-size: 1.25rem;
   }
 
   .icon-button {

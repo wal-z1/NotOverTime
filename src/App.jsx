@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 const STORAGE_PREFIX = 'timers.v1';
 const MAX_TIMERS = 50;
 const DEFAULT_SOUND = 'Beep';
-const LIGHT_DEFAULT_COLOR = '#6750a4';
-const DARK_DEFAULT_COLOR = '#d0bcff';
+const LIGHT_DEFAULT_COLOR = '#2e7d32';
+const DARK_DEFAULT_COLOR = '#81c784';
 const DEMO_PRESETS = [
   { name: 'Focus 25', seconds: 25 * 60 },
   { name: 'Break 5', seconds: 5 * 60 },
@@ -17,7 +17,7 @@ function getDefaultTrackerColor() {
     : LIGHT_DEFAULT_COLOR;
 }
 
-const TRACKER_COLORS = [getDefaultTrackerColor(), '#ff6f61', '#ff9800', '#4caf50', '#2196f3', '#e91e63', '#00acc1'];
+const TRACKER_COLORS = [getDefaultTrackerColor(), '#6750a4', '#ff9800', '#4caf50', '#2196f3', '#e91e63', '#00acc1'];
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -577,6 +577,9 @@ function App() {
                       <div className="remaining-time">{formatDuration(remainingMs / 1000)}</div>
                       <div className="elapsed-total">{formatDuration(timer.elapsedMs / 1000)} / {formatDuration(timer.totalMs / 1000)}</div>
                     </div>
+                  </div>
+                  <div className="linear-progress" aria-label={`${Math.round(progress)}% complete`}>
+                    <span className="linear-progress-fill" style={{ width: `${progress}%`, backgroundColor: timer.color }} />
                   </div>
 
                   <div className="actions-row">
