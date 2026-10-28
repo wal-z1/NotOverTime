@@ -763,7 +763,7 @@ function App() {
                         cx="100"
                         cy="100"
                         r={radius}
-                        className="progress"
+                        className={`progress ${timer.state === 'idle' ? 'reset' : ''}`}
                         strokeDasharray={circumference}
                         strokeDashoffset={offset}
                       />

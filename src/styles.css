@@ -189,7 +189,9 @@ button:active {
 
 .timer-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  max-width: 900px;
+  margin: 0 auto;
   gap: 20px;
 }
 
@@ -324,13 +326,13 @@ button:active {
   display: grid;
   place-items: center;
   width: 100%;
-  min-height: 220px;
+  min-height: 190px;
   margin-bottom: 12px;
 }
 
 .timer-ring {
-  width: min(100%, 220px);
-  height: min(100%, 220px);
+  width: min(100%, 190px);
+  height: min(100%, 190px);
   transform: rotate(-90deg);
   overflow: visible;
   shape-rendering: geometricPrecision;
@@ -357,6 +359,10 @@ button:active {
   stroke-linecap: round;
   transition: stroke-dashoffset 0.25s ease;
   vector-effect: non-scaling-stroke;
+}
+
+.timer-ring .progress.reset {
+  transition: none;
 }
 
 .timer-ring .hand {
