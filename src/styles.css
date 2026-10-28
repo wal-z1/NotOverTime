@@ -207,9 +207,9 @@ button:active {
 }
 
 .timer-grid.compact-mode .timer-card {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
   padding: 10px 12px;
   box-shadow: none;
@@ -217,7 +217,7 @@ button:active {
 }
 
 .timer-grid.compact-mode .card-top {
-  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
   margin: 0;
 }
@@ -238,8 +238,8 @@ button:active {
   font-size: 1.15rem;
 }
 
-.compact-hidden {
-  display: none;
+.timer-grid.compact-mode .compact-hidden {
+  display: none !important;
 }
 
 .timer-card.finished {
