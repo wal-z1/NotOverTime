@@ -211,7 +211,12 @@ function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : settings.theme;
+    document.documentElement.style.setProperty('--primary', settings.trackerColor || getDefaultTrackerColor());
   }, [settings.theme]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--primary', settings.trackerColor || getDefaultTrackerColor());
+  }, [settings.trackerColor]);
 
   useEffect(() => {
     const saved = readStorage('timers', []);
@@ -702,7 +707,8 @@ function App() {
                   </div>
 
                   <div className={`timer-visual ${settings.compactMode ? 'compact-hidden' : ''}`} style={{ '--ring-color': timer.color }}>
-                    <svg viewBox="0 0 200 200" className="timer-ring" aria-label={`${timer.name} remaining ${formatDuration(remainingMs / 1000)}`}>
+                    <svg viewBox="0 0 200 200" className="timer-ring" role="img" aria-label={`${timer.name} remaining ${formatDuration(remainingMs / 1000)}`}>
+                      <circle cx="100" cy="100" r="84" className="outer-ring" />
                       <circle cx="100" cy="100" r={radius} className="track" />
                       <circle
                         cx="100"
@@ -713,6 +719,7 @@ function App() {
                         strokeDashoffset={offset}
                       />
                       <line x1="100" y1="100" x2="100" y2="34" className="hand" style={{ transform: `rotate(${(timer.elapsedMs / timer.totalMs) * 360}deg)` }} />
+                      <circle cx="100" cy="100" r="4" className="hand-cap" />
                     </svg>
                   </div>
                   <div className={`time-editor ${settings.compactMode ? 'compact' : ''}`}>

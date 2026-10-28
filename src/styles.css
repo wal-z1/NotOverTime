@@ -11,6 +11,7 @@
   --primary-strong: #1b5e20;
   --on-primary: #ffffff;
   --ring-track: rgba(0, 0, 0, 0.08);
+  --ring-border: rgba(0, 0, 0, 0.24);
   --success: #2e7d32;
   --danger: #d32f2f;
 }
@@ -28,6 +29,7 @@
   --primary-strong: #4caf50;
   --on-primary: #102313;
   --ring-track: rgba(255, 255, 255, 0.08);
+  --ring-border: rgba(255, 255, 255, 0.28);
   --success: #81c784;
   --danger: #ef9a9a;
 }
@@ -330,26 +332,46 @@ button:active {
   width: min(100%, 220px);
   height: min(100%, 220px);
   transform: rotate(-90deg);
+  overflow: visible;
+  shape-rendering: geometricPrecision;
+}
+
+.timer-ring .outer-ring {
+  fill: none;
+  stroke: var(--ring-border);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
 }
 
 .timer-ring .track {
   fill: none;
   stroke: var(--ring-track);
-  stroke-width: 12;
+  stroke-width: 14;
+  vector-effect: non-scaling-stroke;
 }
 
 .timer-ring .progress {
   fill: none;
   stroke: var(--ring-color, var(--primary));
-  stroke-width: 12;
+  stroke-width: 14;
   stroke-linecap: round;
   transition: stroke-dashoffset 0.25s ease;
+  vector-effect: non-scaling-stroke;
 }
 
 .timer-ring .hand {
   stroke: var(--text);
-  stroke-width: 3;
-  transform-origin: center;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  transform-origin: 100px 100px;
+  vector-effect: non-scaling-stroke;
+}
+
+.timer-ring .hand-cap {
+  fill: var(--text);
+  stroke: var(--surface);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
 }
 
 .time-editor {
@@ -404,16 +426,19 @@ button:active {
 
 .linear-progress {
   width: 100%;
-  height: 8px;
+  height: 12px;
   margin-bottom: 18px;
+  padding: 2px;
   overflow: hidden;
-  background: var(--ring-track);
+  border: 1px solid var(--ring-border);
+  background: var(--surface-strong);
 }
 
 .linear-progress-fill {
   display: block;
   height: 100%;
   min-width: 0;
+  box-shadow: 0 0 8px color-mix(in srgb, currentColor 50%, transparent);
   transition: width 0.25s ease;
 }
 
