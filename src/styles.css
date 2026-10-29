@@ -163,14 +163,26 @@ button:active {
 .main-shell {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 24px 12px 96px;
+  padding: clamp(20px, 3vw, 32px) clamp(12px, 3vw, 24px) 96px;
 }
 
 .empty-state {
   display: grid;
   place-items: center;
-  padding-top: 48px;
+  padding: clamp(32px, 8vw, 72px) 0 0;
   text-align: center;
+}
+
+.empty-state h2 {
+  margin: 0;
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
+}
+
+.empty-state p {
+  max-width: 42rem;
+  margin: 16px auto 20px;
+  font-size: clamp(1rem, 2.5vw, 1.25rem);
+  line-height: 1.45;
 }
 
 .preset-row {
@@ -178,12 +190,14 @@ button:active {
   flex-wrap: wrap;
   gap: 12px;
   justify-content: center;
+  width: 100%;
   margin: 12px 0 20px;
 }
 
 .preset-button {
   min-height: 44px;
-  padding: 0 14px;
+  padding: 8px 14px;
+  font-size: clamp(0.95rem, 2vw, 1.1rem);
   background: var(--surface);
   border: 1px solid var(--outline);
   box-shadow: 0 1px 2px var(--shadow);
@@ -506,10 +520,10 @@ button:active {
 }
 
 .empty-add-button {
-  min-width: 128px;
+  min-width: min(220px, 100%);
   min-height: 48px;
   padding: 0 18px;
-  font-size: 1rem;
+  font-size: clamp(1rem, 2.5vw, 1.15rem);
 }
 
 .dialog-overlay {
@@ -729,19 +743,29 @@ button:active {
     grid-column: 1;
     grid-row: 2;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto;
-    gap: 6px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto;
+    gap: 8px;
     width: 100%;
     align-items: stretch;
     justify-content: stretch;
   }
 
-  .switch-row span {
-    display: none;
+  .switch-row {
+    min-width: 0;
+    justify-content: space-between;
+    gap: 6px;
+    font-size: 0.78rem;
   }
 
-  .switch-row {
-    justify-content: center;
+  .switch-row span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .switch {
+    flex: 0 0 52px;
   }
 
   .brand-wrap h1 {
@@ -749,8 +773,13 @@ button:active {
   }
 
   .icon-button {
-    width: 100%;
+    min-width: 0;
     padding: 0 10px;
+    font-size: 0.9rem;
+  }
+
+  .main-shell {
+    padding-top: 28px;
   }
 
   .timer-grid {
@@ -795,5 +824,82 @@ button:active {
 
   .duration-input-row {
     grid-template-columns: minmax(0, 1fr) 120px;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-header {
+    padding: 10px 12px;
+  }
+
+  .header-actions {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .header-actions .icon-button {
+    width: 100%;
+  }
+
+  .switch-row {
+    min-height: 44px;
+    padding: 0 8px;
+    background: var(--surface-strong);
+    border: 1px solid var(--outline);
+  }
+
+  .empty-state {
+    padding-top: 28px;
+  }
+
+  .preset-row {
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .preset-button {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 0;
+    padding-inline: 8px;
+  }
+
+  .timer-card {
+    padding: 12px;
+  }
+
+  .timer-visual {
+    min-height: 160px;
+  }
+
+  .timer-ring {
+    width: min(100%, 160px);
+    height: min(100%, 160px);
+  }
+
+  .actions-row button {
+    min-height: 44px;
+    padding-inline: 6px;
+    font-size: 0.9rem;
+  }
+
+  .dialog-panel {
+    width: 100%;
+    padding: 12px;
+  }
+
+  .dialog-actions {
+    margin-inline: -12px;
+    padding-inline: 12px;
+  }
+
+  .dialog-actions button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: 10px;
+  }
+
+  .snackbar {
+    width: calc(100vw - 24px);
+    padding-inline: 12px;
+    font-size: 0.95rem;
   }
 }
