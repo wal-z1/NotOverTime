@@ -245,6 +245,7 @@ function App() {
   const [editingId, setEditingId] = useState(null);
   const [editingTimeId, setEditingTimeId] = useState(null);
   const [timeDraft, setTimeDraft] = useState('');
+  const [selectedTimerId, setSelectedTimerId] = useState(null);
   const [highlightedTimerId, setHighlightedTimerId] = useState(null);
   const [draft, setDraft] = useState({
     name: '',
@@ -267,6 +268,37 @@ function App() {
   const timerCardRefs = useRef(new Map());
 
   const timersById = useMemo(() => Object.fromEntries(timers.map((timer) => [timer.id, timer])), [timers]);
+
+  useEffect(() => {
+    if (selectedTimerId && timersById[selectedTimerId]) return;
+    setSelectedTimerId(timers[0]?.id || null);
+  }, [selectedTimerId, timers, timersById]);
+
+  useEffect(() => {
+    const keyboardHandler = (event) => {
+      if (event.key === 'Escape') {
+        if (editingTimeId) {
+          cancelTimeEdit();
+        } else if (dialogOpen || settingsOpen) {
+          setDialogOpen(false);
+          setSettingsOpen(false);
+        }
+        return;
+      }
+
+      if (event.code !== 'Space' || event.defaultPrevented) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest('button, input, select, textarea, a')) return;
+      const timer = timersById[selectedTimerId];
+      if (!timer) return;
+      event.preventDefault();
+      if (timer.state === 'running') pauseTimer(timer.id);
+      else startTimer(timer.id);
+    };
+
+    window.addEventListener('keydown', keyboardHandler);
+    return () => window.removeEventListener('keydown', keyboardHandler);
+  }, [dialogOpen, editingTimeId, selectedTimerId, settingsOpen, timersById]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : settings.theme;
@@ -832,11 +864,14 @@ function App() {
               return (
                 <article
                   key={timer.id}
+                  tabIndex="0"
+                  aria-label={`${timer.name} timer. Press Space to start or pause.`}
                   ref={(element) => {
                     if (element) timerCardRefs.current.set(timer.id, element);
                     else timerCardRefs.current.delete(timer.id);
                   }}
-                  className={`timer-card ${timer.state} ${highlightedTimerId === timer.id ? 'timer-card-highlight' : ''}`}
+                  onFocus={() => setSelectedTimerId(timer.id)}
+                  className={`timer-card ${timer.state} ${selectedTimerId === timer.id ? 'selected' : ''} ${highlightedTimerId === timer.id ? 'timer-card-highlight' : ''}`}
                 >
                   <div className="card-top">
                     <h3>{timer.name}</h3>
@@ -955,7 +990,15 @@ function App() {
       ) : null}
 
       {dialogOpen ? (
-        <div className="dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="timer-dialog-title">
+        <div
+          className="dialog-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="timer-dialog-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setDialogOpen(false);
+          }}
+        >
           <div className="dialog-panel">
             <form onSubmit={handleSubmit}>
               <div className="dialog-header">
@@ -1075,7 +1118,15 @@ function App() {
       ) : null}
 
       {settingsOpen ? (
-        <div className="dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title">
+        <div
+          className="dialog-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="settings-dialog-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSettingsOpen(false);
+          }}
+        >
           <div className="dialog-panel settings-panel">
             <div className="dialog-header">
               <h2 id="settings-dialog-title">Settings</h2>

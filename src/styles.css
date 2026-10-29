@@ -161,7 +161,7 @@ button:active {
 .main-shell {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 24px 16px 96px;
+  padding: 24px 12px 96px;
 }
 
 .empty-state {
@@ -192,7 +192,7 @@ button:active {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
   max-width: 900px;
   margin: 0 auto;
-  gap: 20px;
+  gap: 16px;
 }
 
 .timer-grid.compact-mode {
@@ -208,6 +208,12 @@ button:active {
   box-shadow: 0 2px 6px var(--shadow);
   padding: 16px;
   min-width: 0;
+}
+
+.timer-card:focus-visible,
+.timer-card.selected:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
 }
 
 .timer-grid.compact-mode .timer-card {
