@@ -140,6 +140,8 @@ function sanitizeTimer(timer) {
     elapsedMs,
     color: String(timer.color || getDefaultTrackerColor()),
     sound: String(timer.sound || DEFAULT_SOUND),
+    repeatAlarm: timer.repeatAlarm === true,
+    soundVolume: Number.isFinite(timer.soundVolume) ? clamp(timer.soundVolume, 0, 1) : 0.7,
     state: timer.state === 'running' || timer.state === 'paused' || timer.state === 'finished' ? timer.state : 'idle',
     endTime: typeof timer.endTime === 'number' ? timer.endTime : null,
     updatedAt: Date.now(),
@@ -147,7 +149,7 @@ function sanitizeTimer(timer) {
   };
 }
 
-function buildTimer({ name, totalMs, color, sound }) {
+function buildTimer({ name, totalMs, color, sound, repeatAlarm = false, soundVolume = 0.7 }) {
   return {
     id: crypto.randomUUID(),
     name: String(name || 'Timer'),
@@ -155,6 +157,8 @@ function buildTimer({ name, totalMs, color, sound }) {
     elapsedMs: 0,
     color: color || getDefaultTrackerColor(),
     sound: sound || DEFAULT_SOUND,
+    repeatAlarm: repeatAlarm === true,
+    soundVolume: clamp(Number(soundVolume), 0, 1),
     state: 'idle',
     endTime: null,
     updatedAt: Date.now(),
@@ -242,14 +246,22 @@ function App() {
   const [editingTimeId, setEditingTimeId] = useState(null);
   const [timeDraft, setTimeDraft] = useState('');
   const [highlightedTimerId, setHighlightedTimerId] = useState(null);
-  const [draft, setDraft] = useState({ name: '', duration: 25, durationUnit: 'minutes', color: getDefaultTrackerColor(), sound: DEFAULT_SOUND });
+  const [draft, setDraft] = useState({
+    name: '',
+    duration: 25,
+    durationUnit: 'minutes',
+    color: getDefaultTrackerColor(),
+    sound: DEFAULT_SOUND,
+    repeatAlarm: false,
+    soundVolume: 0.7,
+  });
   const [storageWarning, setStorageWarning] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const timeInputRef = useRef(null);
   const tickerRef = useRef(0);
   const audioContextRef = useRef(null);
-  const alarmIntervalRef = useRef(null);
+  const alarmIntervalRef = useRef(new Map());
   const finishNoticeRef = useRef(new Set());
   const nextRequestRef = useRef(null);
   const timerCardRefs = useRef(new Map());
@@ -437,6 +449,11 @@ function App() {
     return () => clearTimeout(timer);
   }, [storageWarning]);
 
+  useEffect(() => () => {
+    alarmIntervalRef.current.forEach((interval) => window.clearInterval(interval));
+    alarmIntervalRef.current.clear();
+  }, []);
+
   function readStorage(key, fallback) {
     try {
       const raw = localStorage.getItem(`${STORAGE_PREFIX}.${key}`);
@@ -499,7 +516,23 @@ function App() {
     if ('vibrate' in navigator) {
       navigator.vibrate([200, 80, 200, 80, 200]);
     }
-    playAlarm(timer.sound || settings.lastSound || DEFAULT_SOUND, settings.soundVolume || 0.7);
+    const volume = Number.isFinite(timer.soundVolume) ? timer.soundVolume : settings.soundVolume || 0.7;
+    playAlarm(timer.sound || settings.lastSound || DEFAULT_SOUND, volume);
+    if (timer.repeatAlarm) {
+      stopAlarm(timer.id);
+      const interval = window.setInterval(() => {
+        playAlarm(timer.sound || settings.lastSound || DEFAULT_SOUND, volume);
+      }, 3000);
+      alarmIntervalRef.current.set(timer.id, interval);
+    }
+  }
+
+  function stopAlarm(timerId) {
+    const interval = alarmIntervalRef.current.get(timerId);
+    if (interval) {
+      window.clearInterval(interval);
+      alarmIntervalRef.current.delete(timerId);
+    }
   }
 
   function playAlarm(name, volume) {
@@ -556,6 +589,8 @@ function App() {
       durationUnit,
       color: timer ? timer.color : settings.lastColor || settings.trackerColor || getDefaultTrackerColor(),
       sound: timer ? timer.sound : settings.lastSound || DEFAULT_SOUND,
+      repeatAlarm: timer ? timer.repeatAlarm === true : false,
+      soundVolume: timer && Number.isFinite(timer.soundVolume) ? timer.soundVolume : settings.soundVolume,
     });
     setDialogOpen(true);
   }
@@ -612,6 +647,7 @@ function App() {
   }
 
   function startTimer(timerId) {
+    stopAlarm(timerId);
     setTimers((current) => current.map((timer) => {
       if (timer.id !== timerId) return timer;
       const remainingMs = timer.totalMs - timer.elapsedMs;
@@ -633,10 +669,12 @@ function App() {
   }
 
   function resetTimer(timerId) {
+    stopAlarm(timerId);
     setTimers((current) => current.map((timer) => (timer.id === timerId ? { ...timer, elapsedMs: 0, state: 'idle', endTime: null, finishedAt: null } : timer)));
   }
 
   function removeTimer(timerId) {
+    stopAlarm(timerId);
     setTimers((current) => current.filter((timer) => timer.id !== timerId));
   }
 
@@ -654,6 +692,8 @@ function App() {
       totalMs: timer.totalMs,
       color: timer.color,
       sound: timer.sound,
+      repeatAlarm: timer.repeatAlarm,
+      soundVolume: timer.soundVolume,
     });
     duplicate.id = duplicateId;
     setTimers((current) => [...current, duplicate]);
@@ -672,6 +712,8 @@ function App() {
   }
 
   function clearAll() {
+    alarmIntervalRef.current.forEach((interval) => window.clearInterval(interval));
+    alarmIntervalRef.current.clear();
     setTimers([]);
     persistStorage('timers', []);
   }
@@ -689,6 +731,8 @@ function App() {
         totalMs,
         color: draft.color,
         sound: draft.sound,
+        repeatAlarm: draft.repeatAlarm,
+        soundVolume: draft.soundVolume,
       });
       setDialogOpen(false);
       return;
@@ -703,6 +747,8 @@ function App() {
         totalMs,
         color: draft.color,
         sound: draft.sound,
+        repeatAlarm: draft.repeatAlarm,
+        soundVolume: draft.soundVolume,
         elapsedMs: clamp(timer.elapsedMs, 0, totalMs),
         state: timer.state === 'finished' ? 'finished' : timer.state,
       };
@@ -988,6 +1034,35 @@ function App() {
                 <button type="button" className="secondary inline-action" onClick={() => previewSound(draft.sound, settings.soundVolume)}>
                   Test sound
                 </button>
+              </label>
+
+              <label className="setting-toggle inline-setting">
+                <span>
+                  <strong>Repeat until stopped</strong>
+                  <small>Keep playing the alarm every 3 seconds.</small>
+                </span>
+                <button
+                  type="button"
+                  className="switch"
+                  aria-pressed={draft.repeatAlarm}
+                  onClick={() => setDraft((current) => ({ ...current, repeatAlarm: !current.repeatAlarm }))}
+                >
+                  <span className="switch-thumb" />
+                </button>
+              </label>
+
+              <label className="field">
+                <span>Timer sound volume <strong>{Math.round(draft.soundVolume * 100)}%</strong></span>
+                <input
+                  className="range-input"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={draft.soundVolume}
+                  aria-label="Timer sound volume"
+                  onChange={(event) => setDraft((current) => ({ ...current, soundVolume: Number(event.target.value) }))}
+                />
               </label>
 
               <div className="dialog-actions">
