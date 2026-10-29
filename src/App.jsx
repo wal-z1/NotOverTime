@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 const STORAGE_PREFIX = 'timers.v1';
 const MAX_TIMERS = 50;
 const DEFAULT_SOUND = 'Beep';
+const SOUND_OPTIONS = ['Beep', 'Chime', 'Bell', 'Digital', 'Soft Pulse'];
 const LIGHT_DEFAULT_COLOR = '#2e7d32';
 const DARK_DEFAULT_COLOR = '#81c784';
 const DEMO_PRESETS = [
@@ -70,6 +71,11 @@ function getDurationMilliseconds(value, unit) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue) || numericValue <= 0) return 0;
   return Math.round(numericValue * getDurationMultiplier(unit) * 1000);
+}
+
+function getVolumeDb(volume) {
+  if (volume <= 0) return '-60 dB';
+  return `${Math.round(20 * Math.log10(volume))} dB`;
 }
 
 function Icon({ name }) {
@@ -238,6 +244,8 @@ function App() {
   const [highlightedTimerId, setHighlightedTimerId] = useState(null);
   const [draft, setDraft] = useState({ name: '', duration: 25, durationUnit: 'minutes', color: getDefaultTrackerColor(), sound: DEFAULT_SOUND });
   const [storageWarning, setStorageWarning] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [isInstalled, setIsInstalled] = useState(false);
   const timeInputRef = useRef(null);
   const tickerRef = useRef(0);
   const audioContextRef = useRef(null);
@@ -380,6 +388,25 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    setIsInstalled(standalone);
+    const beforeInstallPrompt = (event) => {
+      event.preventDefault();
+      setInstallPrompt(event);
+    };
+    const appInstalled = () => {
+      setInstallPrompt(null);
+      setIsInstalled(true);
+    };
+    window.addEventListener('beforeinstallprompt', beforeInstallPrompt);
+    window.addEventListener('appinstalled', appInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', beforeInstallPrompt);
+      window.removeEventListener('appinstalled', appInstalled);
+    };
+  }, []);
+
+  useEffect(() => {
     if (settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
       document.documentElement.dataset.theme = 'dark';
     }
@@ -480,6 +507,9 @@ function App() {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     const context = audioContextRef.current || new AudioCtx();
     audioContextRef.current = context;
+    if (context.state === 'suspended') {
+      context.resume().catch(() => {});
+    }
 
     const oscillator = context.createOscillator();
     const gainNode = context.createGain();
@@ -499,6 +529,20 @@ function App() {
     gainNode.connect(context.destination);
     oscillator.start();
     oscillator.stop(context.currentTime + 0.65);
+  }
+
+  function previewSound(name = DEFAULT_SOUND, volume = settings.soundVolume) {
+    playAlarm(name, clamp(Number(volume) || 0, 0, 1));
+  }
+
+  async function installApp() {
+    if (!installPrompt) {
+      showSnackbar('Use your browser menu and choose “Add to home screen” or “Install app”.');
+      return;
+    }
+    installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
   }
 
   function openCreateDialog(initialTimer = null) {
@@ -937,10 +981,13 @@ function App() {
               <label className="field">
                 <span>Alarm sound</span>
                 <select value={draft.sound} onChange={(event) => setDraft((current) => ({ ...current, sound: event.target.value }))}>
-                  {['Beep', 'Chime', 'Bell', 'Digital', 'Soft Pulse'].map((sound) => (
+                  {SOUND_OPTIONS.map((sound) => (
                     <option key={sound} value={sound}>{sound}</option>
                   ))}
                 </select>
+                <button type="button" className="secondary inline-action" onClick={() => previewSound(draft.sound, settings.soundVolume)}>
+                  Test sound
+                </button>
               </label>
 
               <div className="dialog-actions">
@@ -1001,6 +1048,36 @@ function App() {
                 <span className="switch-thumb" />
               </button>
             </label>
+
+            <div className="field">
+              <span>Alarm volume <strong>{Math.round(settings.soundVolume * 100)}% ({getVolumeDb(settings.soundVolume)})</strong></span>
+              <small className="field-help">The alarm plays over other audio; your device and browser volume still apply.</small>
+              <input
+                className="range-input"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={settings.soundVolume}
+                aria-label="Alarm volume"
+                onChange={(event) => setSettings((current) => ({ ...current, soundVolume: Number(event.target.value) }))}
+              />
+              <button type="button" className="secondary inline-action" onClick={() => previewSound(settings.lastSound || DEFAULT_SOUND, settings.soundVolume)}>
+                Test {settings.lastSound || DEFAULT_SOUND}
+              </button>
+            </div>
+
+            <div className="install-card">
+              <div>
+                <strong>{isInstalled ? 'App installed' : 'Use NotOverTime as an app'}</strong>
+                <small>{isInstalled ? 'Open it from your home screen for a focused timer window.' : 'Install the offline-ready app for quick access from your home screen.'}</small>
+              </div>
+              {!isInstalled ? (
+                <button type="button" className="secondary" onClick={installApp}>
+                  {installPrompt ? 'Install app' : 'How to install'}
+                </button>
+              ) : null}
+            </div>
 
             <div className="dialog-actions">
               <button type="button" className="primary" onClick={() => setSettingsOpen(false)}>Done</button>

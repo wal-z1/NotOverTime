@@ -18,18 +18,18 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #121212;
-  --surface: #1e1e1e;
-  --surface-strong: #252525;
-  --text: #f1f3f4;
-  --muted: #b7bcc2;
-  --outline: rgba(255, 255, 255, 0.12);
-  --shadow: rgba(0, 0, 0, 0.35);
+  --bg: #000000;
+  --surface: #050505;
+  --surface-strong: #111111;
+  --text: #ffffff;
+  --muted: #c4c9cf;
+  --outline: rgba(255, 255, 255, 0.3);
+  --shadow: rgba(0, 0, 0, 0.7);
   --primary: #81c784;
   --primary-strong: #4caf50;
   --on-primary: #102313;
-  --ring-track: rgba(255, 255, 255, 0.08);
-  --ring-border: rgba(255, 255, 255, 0.28);
+  --ring-track: rgba(255, 255, 255, 0.14);
+  --ring-border: rgba(255, 255, 255, 0.48);
   --success: #81c784;
   --danger: #ef9a9a;
 }
@@ -550,6 +550,11 @@ button:active {
   color: var(--muted);
 }
 
+.field-help {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 .field input,
 .field select {
   border: 1px solid var(--outline);
@@ -557,6 +562,44 @@ button:active {
   color: var(--text);
   padding: 12px 14px;
   min-height: 48px;
+}
+
+.range-input {
+  width: 100%;
+  min-height: 32px;
+  accent-color: var(--primary);
+}
+
+.inline-action {
+  justify-self: start;
+  min-height: 40px;
+  padding: 0 14px;
+}
+
+.install-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid var(--outline);
+  background: var(--surface-strong);
+}
+
+.install-card div {
+  display: grid;
+  gap: 4px;
+}
+
+.install-card small {
+  color: var(--muted);
+}
+
+.install-card button {
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: 0 14px;
 }
 
 .duration-input-row {
@@ -709,5 +752,10 @@ button:active {
   .timer-grid.compact-mode .compact-actions {
     grid-column: 1 / -1;
     justify-content: flex-end;
+  }
+
+  .install-card {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
