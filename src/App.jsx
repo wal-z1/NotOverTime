@@ -134,7 +134,7 @@ function sanitizeTimer(timer) {
   const totalMs = clamp(Math.round(Number(timer.totalMs) || 0), 1000, 99 * 60 * 60 * 1000);
   const elapsedMs = clamp(Math.round(Number(timer.elapsedMs) || 0), 0, totalMs);
   return {
-    id: String(timer.id || crypto.randomUUID ? crypto.randomUUID() : `timer-${Date.now()}`),
+    id: String(timer.id || (crypto.randomUUID ? crypto.randomUUID() : `timer-${Date.now()}`)),
     name: String(timer.name || 'Timer'),
     totalMs,
     elapsedMs,
