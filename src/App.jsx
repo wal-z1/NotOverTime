@@ -104,6 +104,7 @@ function getDefaultSettings() {
     soundVolume: 0.7,
     alarmDuration: 60,
     compactMode: false,
+    reorderMode: false,
     trackerColor: defaultColor,
     lastColor: defaultColor,
     lastSound: DEFAULT_SOUND,
@@ -247,6 +248,8 @@ function App() {
   const [timeDraft, setTimeDraft] = useState('');
   const [selectedTimerId, setSelectedTimerId] = useState(null);
   const [highlightedTimerId, setHighlightedTimerId] = useState(null);
+  const [draggingTimerId, setDraggingTimerId] = useState(null);
+  const [reorderAnnouncement, setReorderAnnouncement] = useState('');
   const [draft, setDraft] = useState({
     name: '',
     duration: 25,
@@ -710,6 +713,33 @@ function App() {
     setTimers((current) => current.filter((timer) => timer.id !== timerId));
   }
 
+  function moveTimer(timerId, direction) {
+    setTimers((current) => {
+      const index = current.findIndex((timer) => timer.id === timerId);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = [...current];
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      setReorderAnnouncement(`${next[index].name} moved to position ${nextIndex + 1} of ${next.length}.`);
+      return next;
+    });
+  }
+
+  function dropTimer(targetTimerId, sourceTimerId = draggingTimerId) {
+    if (!sourceTimerId || sourceTimerId === targetTimerId) return;
+    setTimers((current) => {
+      const fromIndex = current.findIndex((timer) => timer.id === sourceTimerId);
+      const toIndex = current.findIndex((timer) => timer.id === targetTimerId);
+      if (fromIndex < 0 || toIndex < 0) return current;
+      const next = [...current];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      setReorderAnnouncement(`${moved.name} moved to position ${toIndex + 1} of ${next.length}.`);
+      return next;
+    });
+    setDraggingTimerId(null);
+  }
+
   function duplicateTimer(timerId) {
     const timer = timers.find((item) => item.id === timerId);
     if (!timer) return;
@@ -819,6 +849,21 @@ function App() {
               <span className="switch-thumb" />
             </button>
           </label>
+          <label className="switch-row">
+            <span>Reorder timers</span>
+            <button
+              className="switch"
+              type="button"
+              aria-label="Toggle timer reordering"
+              aria-pressed={settings.reorderMode}
+              onClick={() => {
+                setSettings((current) => ({ ...current, reorderMode: !current.reorderMode }));
+                setReorderAnnouncement(settings.reorderMode ? 'Timer reordering off.' : 'Timer reordering on. Drag handles or use move buttons.');
+              }}
+            >
+              <span className="switch-thumb" />
+            </button>
+          </label>
           <button className="icon-button" type="button" aria-label="Open settings" onClick={() => setSettingsOpen(true)}>
             Settings
           </button>
@@ -853,7 +898,15 @@ function App() {
             <button className="empty-add-button primary" type="button" onClick={() => openCreateDialog()}>+ Add timer</button>
           </section>
         ) : (
-          <section className={`timer-grid ${settings.compactMode ? 'compact-mode' : ''}`}>
+          <section
+            className={`timer-grid ${settings.compactMode ? 'compact-mode' : ''} ${settings.reorderMode ? 'reorder-mode' : ''}`}
+            aria-label={settings.reorderMode ? 'Timers. Reordering enabled.' : 'Timers'}
+          >
+            {settings.reorderMode ? (
+              <p className="reorder-help">
+                Drag the handle to reorder, or use the move buttons.
+              </p>
+            ) : null}
             {timers.map((timer) => {
               const remainingMs = Math.max(0, timer.totalMs - timer.elapsedMs);
               const progress = clamp((timer.elapsedMs / timer.totalMs) * 100, 0, 100);
@@ -871,9 +924,57 @@ function App() {
                     else timerCardRefs.current.delete(timer.id);
                   }}
                   onFocus={() => setSelectedTimerId(timer.id)}
-                  className={`timer-card ${timer.state} ${selectedTimerId === timer.id ? 'selected' : ''} ${highlightedTimerId === timer.id ? 'timer-card-highlight' : ''}`}
+                  className={`timer-card ${timer.state} ${selectedTimerId === timer.id ? 'selected' : ''} ${highlightedTimerId === timer.id ? 'timer-card-highlight' : ''} ${draggingTimerId === timer.id ? 'dragging' : ''}`}
+                  onDragOver={(event) => {
+                    if (settings.reorderMode) event.preventDefault();
+                  }}
+                  onDrop={(event) => {
+                    if (settings.reorderMode) {
+                      event.preventDefault();
+                      dropTimer(timer.id, event.dataTransfer.getData('text/plain'));
+                    }
+                  }}
                 >
                   <div className="card-top">
+                    {settings.reorderMode ? (
+                      <div className="reorder-controls">
+                        <button
+                          type="button"
+                          className="drag-handle"
+                          draggable="true"
+                          aria-label={`Drag ${timer.name} to reorder`}
+                          title="Drag to reorder"
+                          onDragStart={(event) => {
+                            event.dataTransfer.effectAllowed = 'move';
+                            event.dataTransfer.setData('text/plain', timer.id);
+                            setDraggingTimerId(timer.id);
+                          }}
+                          onDragEnd={() => setDraggingTimerId(null)}
+                        >
+                          <span aria-hidden="true">☷</span>
+                        </button>
+                        <div className="move-buttons">
+                          <button
+                            type="button"
+                            className="move-button"
+                            aria-label={`Move ${timer.name} up`}
+                            disabled={timers[0].id === timer.id}
+                            onClick={() => moveTimer(timer.id, -1)}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            className="move-button"
+                            aria-label={`Move ${timer.name} down`}
+                            disabled={timers[timers.length - 1].id === timer.id}
+                            onClick={() => moveTimer(timer.id, 1)}
+                          >
+                            ↓
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                     <h3>{timer.name}</h3>
                     {!settings.compactMode ? (
                       <button type="button" className="mini-button secondary" onClick={() => openCreateDialog(timer)}>Edit</button>
@@ -983,6 +1084,9 @@ function App() {
             })}
           </section>
         )}
+        {reorderAnnouncement ? (
+          <p className="sr-only" role="status" aria-live="polite">{reorderAnnouncement}</p>
+        ) : null}
       </main>
 
       {timers.length > 0 ? (

@@ -211,6 +211,75 @@ button:active {
   gap: 16px;
 }
 
+.reorder-help {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.reorder-mode .timer-card {
+  cursor: default;
+}
+
+.reorder-mode .timer-card.dragging {
+  opacity: 0.65;
+}
+
+.reorder-controls {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.drag-handle,
+.move-button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 40px;
+  min-height: 40px;
+  border: 1px solid var(--outline);
+  background: var(--surface-strong);
+}
+
+.drag-handle {
+  cursor: grab;
+  font-size: 1.25rem;
+  touch-action: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.move-buttons {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.move-button {
+  font-size: 1.1rem;
+}
+
+.move-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .timer-grid.compact-mode {
   grid-template-columns: minmax(0, 560px);
   justify-content: start;
@@ -246,6 +315,10 @@ button:active {
   width: 100%;
   min-width: 0;
   margin: 0;
+}
+
+.timer-grid.compact-mode .reorder-controls {
+  order: 0;
 }
 
 .timer-grid.compact-mode .card-top h3 {
@@ -768,6 +841,10 @@ button:active {
     flex: 0 0 52px;
   }
 
+  .reorder-help {
+    text-align: left;
+  }
+
   .brand-wrap h1 {
     font-size: 1.25rem;
   }
@@ -864,6 +941,16 @@ button:active {
 
   .timer-card {
     padding: 12px;
+  }
+
+  .reorder-controls {
+    gap: 2px;
+  }
+
+  .drag-handle,
+  .move-button {
+    min-width: 36px;
+    min-height: 36px;
   }
 
   .timer-visual {
