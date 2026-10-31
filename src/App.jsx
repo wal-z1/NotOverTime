@@ -249,6 +249,7 @@ function App() {
   const [selectedTimerId, setSelectedTimerId] = useState(null);
   const [highlightedTimerId, setHighlightedTimerId] = useState(null);
   const [draggingTimerId, setDraggingTimerId] = useState(null);
+  const [dropTarget, setDropTarget] = useState(null);
   const [reorderAnnouncement, setReorderAnnouncement] = useState('');
   const [draft, setDraft] = useState({
     name: '',
@@ -725,7 +726,7 @@ function App() {
     });
   }
 
-  function dropTimer(targetTimerId, sourceTimerId = draggingTimerId) {
+  function dropTimer(targetTimerId, position = 'before', sourceTimerId = draggingTimerId) {
     if (!sourceTimerId || sourceTimerId === targetTimerId) return;
     setTimers((current) => {
       const fromIndex = current.findIndex((timer) => timer.id === sourceTimerId);
@@ -733,11 +734,14 @@ function App() {
       if (fromIndex < 0 || toIndex < 0) return current;
       const next = [...current];
       const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
-      setReorderAnnouncement(`${moved.name} moved to position ${toIndex + 1} of ${next.length}.`);
+      const targetIndex = next.findIndex((timer) => timer.id === targetTimerId);
+      const insertionIndex = targetIndex + (position === 'after' ? 1 : 0);
+      next.splice(insertionIndex, 0, moved);
+      setReorderAnnouncement(`${moved.name} moved ${position} ${current[toIndex].name}, to position ${insertionIndex + 1} of ${next.length}.`);
       return next;
     });
     setDraggingTimerId(null);
+    setDropTarget(null);
   }
 
   function duplicateTimer(timerId) {
@@ -904,7 +908,7 @@ function App() {
           >
             {settings.reorderMode ? (
               <p className="reorder-help">
-                Drag the handle to reorder, or use the move buttons.
+                <strong>Reordering on.</strong> Drag a handle and release when the highlighted line is where you want the timer, or use the move buttons.
               </p>
             ) : null}
             {timers.map((timer) => {
@@ -924,15 +928,26 @@ function App() {
                     else timerCardRefs.current.delete(timer.id);
                   }}
                   onFocus={() => setSelectedTimerId(timer.id)}
-                  className={`timer-card ${timer.state} ${selectedTimerId === timer.id ? 'selected' : ''} ${highlightedTimerId === timer.id ? 'timer-card-highlight' : ''} ${draggingTimerId === timer.id ? 'dragging' : ''}`}
+                  className={`timer-card ${timer.state} ${selectedTimerId === timer.id ? 'selected' : ''} ${highlightedTimerId === timer.id ? 'timer-card-highlight' : ''} ${draggingTimerId === timer.id ? 'dragging' : ''} ${dropTarget?.id === timer.id ? `drop-${dropTarget.position}` : ''}`}
                   onDragOver={(event) => {
-                    if (settings.reorderMode) event.preventDefault();
+                    if (!settings.reorderMode || !draggingTimerId || draggingTimerId === timer.id) return;
+                    event.preventDefault();
+                    const position = event.clientY < event.currentTarget.getBoundingClientRect().top + event.currentTarget.offsetHeight / 2
+                      ? 'before'
+                      : 'after';
+                    if (dropTarget?.id !== timer.id || dropTarget.position !== position) {
+                      setDropTarget({ id: timer.id, position });
+                    }
+                  }}
+                  onDragLeave={(event) => {
+                    if (event.currentTarget.contains(event.relatedTarget)) return;
+                    if (dropTarget?.id === timer.id) setDropTarget(null);
                   }}
                   onDrop={(event) => {
-                    if (settings.reorderMode) {
-                      event.preventDefault();
-                      dropTimer(timer.id, event.dataTransfer.getData('text/plain'));
-                    }
+                    if (!settings.reorderMode) return;
+                    event.preventDefault();
+                    const sourceTimerId = event.dataTransfer.getData('text/plain');
+                    dropTimer(timer.id, dropTarget?.id === timer.id ? dropTarget.position : 'before', sourceTimerId);
                   }}
                 >
                   <div className="card-top">
@@ -948,8 +963,12 @@ function App() {
                             event.dataTransfer.effectAllowed = 'move';
                             event.dataTransfer.setData('text/plain', timer.id);
                             setDraggingTimerId(timer.id);
+                            setDropTarget(null);
                           }}
-                          onDragEnd={() => setDraggingTimerId(null)}
+                          onDragEnd={() => {
+                            setDraggingTimerId(null);
+                            setDropTarget(null);
+                          }}
                         >
                           <span aria-hidden="true">☷</span>
                         </button>

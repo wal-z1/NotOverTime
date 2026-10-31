@@ -219,12 +219,42 @@ button:active {
   text-align: center;
 }
 
+.reorder-help strong {
+  color: var(--text);
+}
+
 .reorder-mode .timer-card {
+  position: relative;
   cursor: default;
+  transition: opacity 140ms ease, transform 140ms ease, box-shadow 140ms ease;
 }
 
 .reorder-mode .timer-card.dragging {
-  opacity: 0.65;
+  opacity: 0.48;
+  transform: scale(0.985);
+  box-shadow: 0 0 0 2px var(--primary), 0 10px 24px var(--shadow);
+}
+
+.reorder-mode .timer-card.drop-before::before,
+.reorder-mode .timer-card.drop-after::after {
+  position: absolute;
+  right: 10px;
+  left: 10px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent), 0 2px 8px var(--shadow);
+  content: '';
+  pointer-events: none;
+  z-index: 2;
+}
+
+.reorder-mode .timer-card.drop-before::before {
+  top: -4px;
+}
+
+.reorder-mode .timer-card.drop-after::after {
+  bottom: -4px;
 }
 
 .reorder-controls {
@@ -248,6 +278,8 @@ button:active {
   cursor: grab;
   font-size: 1.25rem;
   touch-action: none;
+  color: var(--primary);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 24%, transparent);
 }
 
 .drag-handle:active {
@@ -266,6 +298,11 @@ button:active {
 .move-button:disabled {
   cursor: not-allowed;
   opacity: 0.4;
+}
+
+.reorder-mode .drag-handle:hover,
+.reorder-mode .drag-handle:focus-visible {
+  background: color-mix(in srgb, var(--primary) 14%, var(--surface-strong));
 }
 
 .sr-only {
