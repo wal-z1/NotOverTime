@@ -1,227 +1,34 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-
-const STORAGE_PREFIX = 'timers.v1';
-const MAX_TIMERS = 50;
-const DEFAULT_SOUND = 'Beep';
-const SOUND_OPTIONS = ['Beep', 'Chime', 'Bell', 'Digital', 'Soft Pulse'];
-const LIGHT_DEFAULT_COLOR = '#2e7d32';
-const DARK_DEFAULT_COLOR = '#81c784';
-const DEMO_PRESETS = [
-  { name: 'Focus 25', seconds: 25 * 60 },
-  { name: 'Break 5', seconds: 5 * 60 },
-  { name: 'Deep Work 50', seconds: 50 * 60 },
-  { name: 'Walk 10', seconds: 10 * 60 },
-];
-function getDefaultTrackerColor() {
-  return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
-    ? DARK_DEFAULT_COLOR
-    : LIGHT_DEFAULT_COLOR;
-}
-
-const TRACKER_COLORS = [getDefaultTrackerColor(), '#6750a4', '#ff9800', '#4caf50', '#2196f3', '#e91e63', '#00acc1'];
-
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function pad(value) {
-  return String(value).padStart(2, '0');
-}
-
-function formatDuration(totalSeconds) {
-  const bounded = clamp(Math.max(0, Math.round(totalSeconds)), 0, 99 * 60 * 60 + 59 * 60 + 59);
-  const hours = Math.floor(bounded / 3600);
-  const minutes = Math.floor((bounded % 3600) / 60);
-  const seconds = bounded % 60;
-  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-}
-
-function parseDurationInput(raw) {
-  const value = String(raw).trim();
-  if (!value) return 0;
-  const parts = value.split(':').map((part) => part.replace(/[^0-9]/g, ''));
-  if (parts.length === 1) {
-    return clamp(Number(parts[0]) || 0, 0, 99 * 3600 + 59 * 60 + 59);
-  }
-  let total = 0;
-  const reversed = [...parts].reverse();
-  const multipliers = [1, 60, 3600];
-  reversed.forEach((part, index) => {
-    total += (Number(part) || 0) * multipliers[index];
-  });
-  return clamp(total, 0, 99 * 3600 + 59 * 60 + 59);
-}
-
-function getDurationUnit(seconds) {
-  if (seconds % 3600 === 0) return 'hours';
-  if (seconds % 60 === 0) return 'minutes';
-  return 'seconds';
-}
-
-function getDurationValue(seconds, unit) {
-  const divisor = unit === 'hours' ? 3600 : unit === 'minutes' ? 60 : 1;
-  return seconds / divisor;
-}
-
-function getDurationMultiplier(unit) {
-  return unit === 'hours' ? 3600 : unit === 'minutes' ? 60 : 1;
-}
-
-function getDurationMilliseconds(value, unit) {
-  const numericValue = Number(value);
-  if (!Number.isFinite(numericValue) || numericValue <= 0) return 0;
-  return Math.round(numericValue * getDurationMultiplier(unit) * 1000);
-}
-
-function getVolumeDb(volume) {
-  if (volume <= 0) return '-60 dB';
-  return `${Math.round(20 * Math.log10(volume))} dB`;
-}
-
-function Icon({ name }) {
-  const paths = {
-    play: <path d="M8 5v14l11-7L8 5Z" />,
-    pause: <path d="M7 5h3v14H7zM14 5h3v14h-3z" />,
-    reset: <path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6M4 4v4.6h4.6" />,
-    edit: <path d="m4 16.8-.8 3.9 3.9-.8L18.6 8.4a2.1 2.1 0 0 0-3-3L4 16.8Z" />,
-    duplicate: <path d="M8 8h11v12H8zM5 16H3V3h13v2" />,
-    trash: <path d="M5 7h14M10 11v5m4-5v5M8 7l1-3h6l1 3m-9 0 1 13h8l1-13" />,
-  };
-
-  return (
-    <svg className="button-icon" viewBox="0 0 24 24" aria-hidden="true">
-      {paths[name]}
-    </svg>
-  );
-}
-
-function getDefaultSettings() {
-  const defaultColor = getDefaultTrackerColor();
-  return {
-    theme: 'system',
-    siteNotifications: false,
-    notifyOnFinish: true,
-    soundVolume: 0.7,
-    alarmDuration: 60,
-    compactMode: false,
-    reorderMode: false,
-    trackerColor: defaultColor,
-    lastColor: defaultColor,
-    lastSound: DEFAULT_SOUND,
-    wakeLock: true,
-  };
-}
-
-function safeParse(json, fallback) {
-  try {
-    return JSON.parse(json);
-  } catch {
-    return fallback;
-  }
-}
-
-function isValidTimer(timer) {
-  if (!timer || typeof timer !== 'object') return false;
-  if (typeof timer.id !== 'string' || !timer.id) return false;
-  if (typeof timer.name !== 'string') return false;
-  if (!Number.isFinite(timer.totalMs) || timer.totalMs <= 0) return false;
-  if (!Number.isFinite(timer.elapsedMs) || timer.elapsedMs < 0) return false;
-  if (timer.elapsedMs > timer.totalMs) return false;
-  if (!['idle', 'running', 'paused', 'finished'].includes(timer.state)) return false;
-  return true;
-}
-
-function sanitizeTimer(timer) {
-  const totalMs = clamp(Math.round(Number(timer.totalMs) || 0), 1000, 99 * 60 * 60 * 1000);
-  const elapsedMs = clamp(Math.round(Number(timer.elapsedMs) || 0), 0, totalMs);
-  return {
-    id: String(timer.id || (crypto.randomUUID ? crypto.randomUUID() : `timer-${Date.now()}`)),
-    name: String(timer.name || 'Timer'),
-    totalMs,
-    elapsedMs,
-    color: String(timer.color || getDefaultTrackerColor()),
-    sound: String(timer.sound || DEFAULT_SOUND),
-    repeatAlarm: timer.repeatAlarm === true,
-    soundVolume: Number.isFinite(timer.soundVolume) ? clamp(timer.soundVolume, 0, 1) : 0.7,
-    state: timer.state === 'running' || timer.state === 'paused' || timer.state === 'finished' ? timer.state : 'idle',
-    endTime: typeof timer.endTime === 'number' ? timer.endTime : null,
-    updatedAt: Date.now(),
-    finishedAt: typeof timer.finishedAt === 'number' ? timer.finishedAt : null,
-  };
-}
-
-function buildTimer({ name, totalMs, color, sound, repeatAlarm = false, soundVolume = 0.7 }) {
-  return {
-    id: crypto.randomUUID(),
-    name: String(name || 'Timer'),
-    totalMs: clamp(Math.round(totalMs || 0), 1000, 99 * 60 * 60 * 1000),
-    elapsedMs: 0,
-    color: color || getDefaultTrackerColor(),
-    sound: sound || DEFAULT_SOUND,
-    repeatAlarm: repeatAlarm === true,
-    soundVolume: clamp(Number(soundVolume), 0, 1),
-    state: 'idle',
-    endTime: null,
-    updatedAt: Date.now(),
-    finishedAt: null,
-  };
-}
-
-function pauseTimersForPersistence(timers, now = Date.now()) {
-  return timers.map((timer) => {
-    if (timer.state !== 'running' || !timer.endTime) return timer;
-
-    const elapsedMs = clamp(
-      timer.totalMs - Math.max(0, timer.endTime - now),
-      0,
-      timer.totalMs
-    );
-    const finished = elapsedMs >= timer.totalMs;
-
-    return {
-      ...timer,
-      elapsedMs,
-      state: finished ? 'finished' : 'paused',
-      endTime: null,
-      finishedAt: finished ? (timer.finishedAt || now) : null,
-      updatedAt: now,
-    };
-  });
-}
-
-function resetTimersForLoad(timers) {
-  return timers.map((timer) => ({
-    ...timer,
-    elapsedMs: 0,
-    state: 'idle',
-    endTime: null,
-    finishedAt: null,
-    updatedAt: Date.now(),
-  }));
-}
-
-function useLocalStorageState(key, defaultValue, validate) {
-  const [value, setValue] = useState(() => {
-    try {
-      const stored = localStorage.getItem(key);
-      if (!stored) return defaultValue;
-      const parsed = safeParse(stored, defaultValue);
-      return validate ? validate(parsed) : parsed;
-    } catch {
-      return defaultValue;
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch {
-      // storage unavailable
-    }
-  }, [key, value]);
-
-  return [value, setValue];
-}
+import {
+  DEFAULT_SOUND,
+  DEMO_PRESETS,
+  MAX_DURATION_MS,
+  MAX_TIMERS,
+  SOUND_OPTIONS,
+  STORAGE_PREFIX,
+  TRACKER_COLORS,
+  getDefaultTrackerColor,
+} from './constants';
+import {
+  buildTimer,
+  clamp,
+  formatDuration,
+  getDurationMilliseconds,
+  getDurationMultiplier,
+  getDurationUnit,
+  getDurationValue,
+  getVolumeDb,
+  isValidTimer,
+  parseDurationInput,
+  pauseTimersForPersistence,
+  resetTimersForLoad,
+  safeParse,
+  sanitizeTimer,
+  getDefaultSettings,
+} from './utils/timer';
+import AppHeader from './components/AppHeader';
+import EmptyState from './components/EmptyState';
+import TimerCard from './components/TimerCard';
 
 function App() {
   const [timers, setTimers] = useState([]);
@@ -670,7 +477,7 @@ function App() {
     }
 
     const remainingMs = remainingSeconds * 1000;
-    const totalMs = clamp(timer.elapsedMs + remainingMs, 1000, 99 * 60 * 60 * 1000);
+    const totalMs = clamp(timer.elapsedMs + remainingMs, 1000, MAX_DURATION_MS);
     const normalizedRemainingMs = totalMs - timer.elapsedMs;
     updateTimer(timer.id, {
       totalMs,
@@ -789,7 +596,7 @@ function App() {
     const totalMs = clamp(
       getDurationMilliseconds(draft.duration, draft.durationUnit || 'minutes'),
       1000,
-      99 * 60 * 60 * 1000
+      MAX_DURATION_MS
     );
     if (!editingId) {
       addTimer({
@@ -824,83 +631,26 @@ function App() {
 
   return (
     <>
-      <header className="app-header">
-        <div className="brand-wrap">
-          <h1>NotOverTime</h1>
-        </div>
-        <div className="header-actions">
-          <label className="switch-row">
-            <span>Site notifications</span>
-            <button
-              className="switch"
-              type="button"
-              aria-label="Toggle site notifications"
-              aria-pressed={settings.siteNotifications}
-              onClick={toggleSiteNotifications}
-            >
-              <span className="switch-thumb" />
-            </button>
-          </label>
-          <label className="switch-row">
-            <span>Compact mode</span>
-            <button
-              className="switch"
-              type="button"
-              aria-label="Toggle compact mode"
-              aria-pressed={settings.compactMode}
-              onClick={() => setSettings((current) => ({ ...current, compactMode: !current.compactMode }))}
-            >
-              <span className="switch-thumb" />
-            </button>
-          </label>
-          <label className="switch-row">
-            <span>Reorder timers</span>
-            <button
-              className="switch"
-              type="button"
-              aria-label="Toggle timer reordering"
-              aria-pressed={settings.reorderMode}
-              onClick={() => {
-                setSettings((current) => ({ ...current, reorderMode: !current.reorderMode }));
-                setReorderAnnouncement(settings.reorderMode ? 'Timer reordering off.' : 'Timer reordering on. Drag handles or use move buttons.');
-              }}
-            >
-              <span className="switch-thumb" />
-            </button>
-          </label>
-          <button className="icon-button" type="button" aria-label="Open settings" onClick={() => setSettingsOpen(true)}>
-            Settings
-          </button>
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="Toggle dark mode"
-            onClick={() => setSettings((current) => ({ ...current, theme: current.theme === 'dark' ? 'light' : 'dark' }))}
-          >
-            {settings.theme === 'dark' ? 'Light' : 'Dark'}
-          </button>
-        </div>
-      </header>
+      <AppHeader
+        settings={settings}
+        setSettings={setSettings}
+        setSettingsOpen={setSettingsOpen}
+        setReorderAnnouncement={setReorderAnnouncement}
+        toggleSiteNotifications={toggleSiteNotifications}
+      />
 
       <main className="main-shell">
         {timers.length === 0 ? (
-          <section className="empty-state">
-            <h2>No timers yet</h2>
-            <p>Start with a focused burst or pick a quick preset.</p>
-            <div className="preset-row">
-              {DEMO_PRESETS.map((preset) => (
-                <button
-                  key={preset.name}
-                  type="button"
-                  className="preset-button"
-                  onClick={() => addTimer({ name: preset.name, totalMs: preset.seconds * 1000, color: settings.trackerColor || getDefaultTrackerColor(), sound: DEFAULT_SOUND })}
-                >
-                  {preset.name}
-                </button>
-              ))}
-            </div>
-            <button className="empty-add-button primary" type="button" onClick={() => openCreateDialog()}>+ Add timer</button>
-          </section>
+          <EmptyState
+            presets={DEMO_PRESETS}
+            onAddPreset={(preset) => addTimer({
+              name: preset.name,
+              totalMs: preset.seconds * 1000,
+              color: settings.trackerColor || getDefaultTrackerColor(),
+              sound: DEFAULT_SOUND,
+            })}
+            onAddTimer={() => openCreateDialog()}
+          />
         ) : (
           <section
             className={`timer-grid ${settings.compactMode ? 'compact-mode' : ''} ${settings.reorderMode ? 'reorder-mode' : ''}`}
@@ -911,196 +661,68 @@ function App() {
                 <strong>Reordering on.</strong> Drag a handle and release when the highlighted line is where you want the timer, or use the move buttons.
               </p>
             ) : null}
-            {timers.map((timer) => {
-              const remainingMs = Math.max(0, timer.totalMs - timer.elapsedMs);
-              const progress = clamp((timer.elapsedMs / timer.totalMs) * 100, 0, 100);
-              const radius = 72;
-              const circumference = 2 * Math.PI * radius;
-              const offset = circumference * (1 - progress / 100);
-
-              return (
-                <article
-                  key={timer.id}
-                  tabIndex="0"
-                  aria-label={`${timer.name} timer. Press Space to start or pause.`}
-                  ref={(element) => {
-                    if (element) timerCardRefs.current.set(timer.id, element);
-                    else timerCardRefs.current.delete(timer.id);
-                  }}
-                  onFocus={() => setSelectedTimerId(timer.id)}
-                  className={`timer-card ${timer.state} ${selectedTimerId === timer.id ? 'selected' : ''} ${highlightedTimerId === timer.id ? 'timer-card-highlight' : ''} ${draggingTimerId === timer.id ? 'dragging' : ''} ${dropTarget?.id === timer.id ? `drop-${dropTarget.position}` : ''}`}
-                  onDragOver={(event) => {
-                    if (!settings.reorderMode || !draggingTimerId || draggingTimerId === timer.id) return;
-                    event.preventDefault();
-                    const position = event.clientY < event.currentTarget.getBoundingClientRect().top + event.currentTarget.offsetHeight / 2
-                      ? 'before'
-                      : 'after';
-                    if (dropTarget?.id !== timer.id || dropTarget.position !== position) {
-                      setDropTarget({ id: timer.id, position });
-                    }
-                  }}
-                  onDragLeave={(event) => {
-                    if (event.currentTarget.contains(event.relatedTarget)) return;
-                    if (dropTarget?.id === timer.id) setDropTarget(null);
-                  }}
-                  onDrop={(event) => {
-                    if (!settings.reorderMode) return;
-                    event.preventDefault();
-                    const sourceTimerId = event.dataTransfer.getData('text/plain');
-                    dropTimer(timer.id, dropTarget?.id === timer.id ? dropTarget.position : 'before', sourceTimerId);
-                  }}
-                >
-                  <div className="card-top">
-                    {settings.reorderMode ? (
-                      <div className="reorder-controls">
-                        <button
-                          type="button"
-                          className="drag-handle"
-                          draggable="true"
-                          aria-label={`Drag ${timer.name} to reorder`}
-                          title="Drag to reorder"
-                          onDragStart={(event) => {
-                            event.dataTransfer.effectAllowed = 'move';
-                            event.dataTransfer.setData('text/plain', timer.id);
-                            setDraggingTimerId(timer.id);
-                            setDropTarget(null);
-                          }}
-                          onDragEnd={() => {
-                            setDraggingTimerId(null);
-                            setDropTarget(null);
-                          }}
-                        >
-                          <span aria-hidden="true">☷</span>
-                        </button>
-                        <div className="move-buttons">
-                          <button
-                            type="button"
-                            className="move-button"
-                            aria-label={`Move ${timer.name} up`}
-                            disabled={timers[0].id === timer.id}
-                            onClick={() => moveTimer(timer.id, -1)}
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            className="move-button"
-                            aria-label={`Move ${timer.name} down`}
-                            disabled={timers[timers.length - 1].id === timer.id}
-                            onClick={() => moveTimer(timer.id, 1)}
-                          >
-                            ↓
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-                    <h3>{timer.name}</h3>
-                    {!settings.compactMode ? (
-                      <button type="button" className="mini-button secondary" onClick={() => openCreateDialog(timer)}>Edit</button>
-                    ) : null}
-                  </div>
-
-                  <div className={`timer-visual ${settings.compactMode ? 'compact-hidden' : ''}`} style={{ '--ring-color': timer.color }}>
-                    <svg viewBox="0 0 200 200" className="timer-ring" role="img" aria-label={`${timer.name} remaining ${formatDuration(remainingMs / 1000)}`}>
-                      <circle cx="100" cy="100" r="84" className="outer-ring" />
-                      <circle cx="100" cy="100" r={radius} className="track" />
-                      <circle
-                        cx="100"
-                        cy="100"
-                        r={radius}
-                        className={`progress ${timer.state === 'idle' ? 'reset' : ''}`}
-                        strokeDasharray={circumference}
-                        strokeDashoffset={offset}
-                      />
-                      <line x1="100" y1="100" x2="100" y2="34" className="hand" style={{ transform: `rotate(${(timer.elapsedMs / timer.totalMs) * 360}deg)` }} />
-                      <circle cx="100" cy="100" r="4" className="hand-cap" />
-                    </svg>
-                  </div>
-                  <div className={`time-editor ${settings.compactMode ? 'compact' : ''}`}>
-                    {editingTimeId === timer.id ? (
-                      <input
-                        ref={timeInputRef}
-                        className="time-input"
-                        type="text"
-                        inputMode="numeric"
-                        aria-label={`Edit ${timer.name} remaining time`}
-                        value={timeDraft}
-                        onChange={(event) => setTimeDraft(event.target.value)}
-                        onBlur={() => saveTimeEdit(timer)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') saveTimeEdit(timer);
-                          if (event.key === 'Escape') cancelTimeEdit();
-                        }}
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        className="remaining-time"
-                        aria-label={`Edit ${timer.name} remaining time`}
-                        onClick={() => beginTimeEdit(timer)}
-                      >
-                        {formatDuration(remainingMs / 1000)}
-                      </button>
-                    )}
-                    {!settings.compactMode ? (
-                      <div className="elapsed-total">{formatDuration(timer.elapsedMs / 1000)} / {formatDuration(timer.totalMs / 1000)}</div>
-                    ) : null}
-                  </div>
-                  <div className={`linear-progress ${settings.compactMode ? 'compact-hidden' : ''}`} aria-label={`${Math.round(progress)}% complete`}>
-                    <span className="linear-progress-fill" style={{ width: `${progress}%`, backgroundColor: timer.color }} />
-                  </div>
-
-                  <div className={`actions-row ${settings.compactMode ? 'compact-hidden' : ''}`}>
-                    {timer.state === 'running' ? (
-                      <button type="button" className="primary" onClick={() => pauseTimer(timer.id)}>Pause</button>
-                    ) : (
-                      <button type="button" className="primary" onClick={() => startTimer(timer.id)}>{timer.state === 'finished' ? 'Restart' : 'Start'}</button>
-                    )}
-                    <button type="button" className="secondary" onClick={() => resetTimer(timer.id)}>Reset</button>
-                    <button type="button" className="secondary" onClick={() => duplicateTimer(timer.id)}>Duplicate</button>
-                    <button type="button" className="danger" onClick={() => removeTimer(timer.id)}>Delete</button>
-                  </div>
-                  <div className="compact-actions">
-                    <button
-                      type="button"
-                      className="compact-icon-button primary"
-                      aria-label={timer.state === 'running' ? `Pause ${timer.name}` : `Start ${timer.name}`}
-                      title={timer.state === 'running' ? 'Pause' : 'Start'}
-                      onClick={() => timer.state === 'running' ? pauseTimer(timer.id) : startTimer(timer.id)}
-                    >
-                      <Icon name={timer.state === 'running' ? 'pause' : 'play'} />
-                    </button>
-                    <button
-                      type="button"
-                      className="compact-icon-button secondary"
-                      aria-label={`Reset ${timer.name}`}
-                      title="Reset"
-                      onClick={() => resetTimer(timer.id)}
-                    >
-                      <Icon name="reset" />
-                    </button>
-                    <button
-                      type="button"
-                      className="compact-icon-button secondary"
-                      aria-label={`Edit ${timer.name}`}
-                      title="Edit"
-                      onClick={() => openCreateDialog(timer)}
-                    >
-                      <Icon name="edit" />
-                    </button>
-                    <button
-                      type="button"
-                      className="compact-icon-button danger"
-                      aria-label={`Delete ${timer.name}`}
-                      title="Delete"
-                      onClick={() => removeTimer(timer.id)}
-                    >
-                      <Icon name="trash" />
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
+            {timers.map((timer) => (
+              <TimerCard
+                key={timer.id}
+                timer={timer}
+                timers={timers}
+                compactMode={settings.compactMode}
+                reorderMode={settings.reorderMode}
+                selected={selectedTimerId === timer.id}
+                highlighted={highlightedTimerId === timer.id}
+                dragging={draggingTimerId === timer.id}
+                dropTarget={dropTarget?.id === timer.id ? dropTarget.position : null}
+                editingTime={editingTimeId === timer.id}
+                timeDraft={timeDraft}
+                timeInputRef={timeInputRef}
+                onFocus={() => setSelectedTimerId(timer.id)}
+                onOpenEditor={() => openCreateDialog(timer)}
+                onBeginTimeEdit={() => beginTimeEdit(timer)}
+                onCancelTimeEdit={cancelTimeEdit}
+                onSaveTimeEdit={() => saveTimeEdit(timer)}
+                onTimeDraftChange={(event) => setTimeDraft(event.target.value)}
+                onStart={() => startTimer(timer.id)}
+                onPause={() => pauseTimer(timer.id)}
+                onReset={() => resetTimer(timer.id)}
+                onDuplicate={() => duplicateTimer(timer.id)}
+                onRemove={() => removeTimer(timer.id)}
+                onMove={(direction) => moveTimer(timer.id, direction)}
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = 'move';
+                  event.dataTransfer.setData('text/plain', timer.id);
+                  setDraggingTimerId(timer.id);
+                  setDropTarget(null);
+                }}
+                onDragEnd={() => {
+                  setDraggingTimerId(null);
+                  setDropTarget(null);
+                }}
+                onDragOver={(event) => {
+                  if (!settings.reorderMode || !draggingTimerId || draggingTimerId === timer.id) return;
+                  event.preventDefault();
+                  const position = event.clientY < event.currentTarget.getBoundingClientRect().top + event.currentTarget.offsetHeight / 2
+                    ? 'before'
+                    : 'after';
+                  if (dropTarget?.id !== timer.id || dropTarget.position !== position) {
+                    setDropTarget({ id: timer.id, position });
+                  }
+                }}
+                onDragLeave={(event) => {
+                  if (event.currentTarget.contains(event.relatedTarget)) return;
+                  if (dropTarget?.id === timer.id) setDropTarget(null);
+                }}
+                onDrop={(event) => {
+                  if (!settings.reorderMode) return;
+                  event.preventDefault();
+                  const sourceTimerId = event.dataTransfer.getData('text/plain');
+                  dropTimer(timer.id, dropTarget?.id === timer.id ? dropTarget.position : 'before', sourceTimerId);
+                }}
+                cardRef={(element) => {
+                  if (element) timerCardRefs.current.set(timer.id, element);
+                  else timerCardRefs.current.delete(timer.id);
+                }}
+              />
+            ))}
           </section>
         )}
         {reorderAnnouncement ? (

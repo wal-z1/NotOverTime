@@ -9,6 +9,14 @@ Small, local-first timer app for focused work.
 - PWA/offline support
 - Notifications and alarms
 
+## Source layout
+
+- `src/App.jsx` owns application state, timer lifecycle effects, persistence coordination, and event handlers.
+- `src/constants.js` contains shared app configuration and preset values.
+- `src/utils/timer.js` contains timer formatting, validation, normalization, and persistence helpers.
+- `src/components/` contains presentational pieces shared by the app shell (`AppHeader`, `EmptyState`, `TimerCard`, and `Icon`).
+- `src/styles.css` contains the global design tokens and responsive UI styles.
+
 ## Run
 
 ```bash
