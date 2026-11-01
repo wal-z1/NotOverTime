@@ -24,6 +24,7 @@ export default function TimerCard({
   onReset,
   onDuplicate,
   onRemove,
+  onStopAlarm,
   onMove,
   onDragStart,
   onDragEnd,
@@ -113,6 +114,7 @@ export default function TimerCard({
         <button type="button" className="secondary" onClick={onReset}>Reset</button>
         <button type="button" className="secondary" onClick={onDuplicate}>Duplicate</button>
         <button type="button" className="danger" onClick={onRemove}>Delete</button>
+        {timer.state === 'finished' && timer.repeatAlarm ? <button type="button" className="danger" onClick={onStopAlarm}>Stop sound</button> : null}
       </div>
 
       <div className="compact-actions">
@@ -122,6 +124,7 @@ export default function TimerCard({
         <button type="button" className="compact-icon-button secondary" aria-label={`Reset ${timer.name}`} title="Reset" onClick={onReset}><Icon name="reset" /></button>
         <button type="button" className="compact-icon-button secondary" aria-label={`Edit ${timer.name}`} title="Edit" onClick={onOpenEditor}><Icon name="edit" /></button>
         <button type="button" className="compact-icon-button danger" aria-label={`Delete ${timer.name}`} title="Delete" onClick={onRemove}><Icon name="trash" /></button>
+        {timer.state === 'finished' && timer.repeatAlarm ? <button type="button" className="compact-icon-button danger" aria-label={`Stop sound for ${timer.name}`} title="Stop sound" onClick={onStopAlarm}>■</button> : null}
       </div>
     </article>
   );

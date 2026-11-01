@@ -73,6 +73,7 @@ function App() {
   const tickerRef = useRef(0);
   const audioContextRef = useRef(null);
   const alarmIntervalRef = useRef(new Map());
+  const activeAlarmRef = useRef(new Map());
   const finishNoticeRef = useRef(new Set());
   const nextRequestRef = useRef(null);
   const volumePreviewTimeoutRef = useRef(null);
@@ -295,6 +296,10 @@ function App() {
   useEffect(() => () => {
     alarmIntervalRef.current.forEach((interval) => window.clearInterval(interval));
     alarmIntervalRef.current.clear();
+    activeAlarmRef.current.forEach((oscillator) => {
+      oscillator.stop();
+    });
+    activeAlarmRef.current.clear();
     window.clearTimeout(volumePreviewTimeoutRef.current);
   }, []);
 
@@ -363,11 +368,11 @@ function App() {
     const volume = timer.useGlobalVolume
       ? settings.soundVolume
       : (Number.isFinite(timer.soundVolume) ? timer.soundVolume : settings.soundVolume || 0.7);
-    playAlarm(timer.sound || settings.lastSound || DEFAULT_SOUND, volume);
+    playAlarm(timer.sound || settings.lastSound || DEFAULT_SOUND, volume, timer.id);
     if (timer.repeatAlarm) {
       stopAlarm(timer.id);
       const interval = window.setInterval(() => {
-        playAlarm(timer.sound || settings.lastSound || DEFAULT_SOUND, volume);
+        playAlarm(timer.sound || settings.lastSound || DEFAULT_SOUND, volume, timer.id);
       }, 3000);
       alarmIntervalRef.current.set(timer.id, interval);
     }
@@ -379,9 +384,14 @@ function App() {
       window.clearInterval(interval);
       alarmIntervalRef.current.delete(timerId);
     }
+    const oscillator = activeAlarmRef.current.get(timerId);
+    if (oscillator) {
+      activeAlarmRef.current.delete(timerId);
+      oscillator.stop();
+    }
   }
 
-  function playAlarm(name, volume) {
+  function playAlarm(name, volume, timerId = null) {
     if (!name || !('AudioContext' in window || 'webkitAudioContext' in window)) return;
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     const context = audioContextRef.current || new AudioCtx();
@@ -406,6 +416,14 @@ function App() {
     gainNode.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.6);
     oscillator.connect(gainNode);
     gainNode.connect(context.destination);
+    if (timerId) {
+      activeAlarmRef.current.set(timerId, oscillator);
+      oscillator.addEventListener('ended', () => {
+        if (activeAlarmRef.current.get(timerId) === oscillator) {
+          activeAlarmRef.current.delete(timerId);
+        }
+      }, { once: true });
+    }
     oscillator.start();
     oscillator.stop(context.currentTime + 0.65);
   }
@@ -704,6 +722,7 @@ function App() {
                 onReset={() => resetTimer(timer.id)}
                 onDuplicate={() => duplicateTimer(timer.id)}
                 onRemove={() => removeTimer(timer.id)}
+                onStopAlarm={() => stopAlarm(timer.id)}
                 onMove={(direction) => moveTimer(timer.id, direction)}
                 onDragStart={(event) => {
                   event.dataTransfer.effectAllowed = 'move';
@@ -746,6 +765,11 @@ function App() {
         {reorderAnnouncement ? (
           <p className="sr-only" role="status" aria-live="polite">{reorderAnnouncement}</p>
         ) : null}
+        <footer className="app-footer" aria-label="Project links">
+          <a href="https://github.com/wal-z1/NotOverTime" target="_blank" rel="noreferrer">
+            View NotOverTime on GitHub
+          </a>
+        </footer>
       </main>
 
       {timers.length > 0 ? (
