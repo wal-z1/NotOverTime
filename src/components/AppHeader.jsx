@@ -1,9 +1,13 @@
+import { getVolumeDb } from '../utils/timer';
+
 export default function AppHeader({
   settings,
   setSettings,
   setSettingsOpen,
   setReorderAnnouncement,
   toggleSiteNotifications,
+  onPreviewSound,
+  onVolumeChange,
 }) {
   const toggleSetting = (key) => {
     setSettings((current) => ({ ...current, [key]: !current[key] }));
@@ -60,6 +64,24 @@ export default function AppHeader({
             <span className="switch-thumb" />
           </button>
         </label>
+        <div className="header-sound-control">
+          <label className="header-sound-level">
+            <span>Sound <strong>{Math.round(settings.soundVolume * 100)}% ({getVolumeDb(settings.soundVolume)})</strong></span>
+            <input
+              className="range-input"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={settings.soundVolume}
+              aria-label="Global alarm volume"
+              onChange={(event) => onVolumeChange(Number(event.target.value))}
+            />
+          </label>
+          <button type="button" className="icon-button sound-test-button" onClick={() => onPreviewSound(settings.lastSound, settings.soundVolume)}>
+            Test
+          </button>
+        </div>
         <button className="icon-button" type="button" aria-label="Open settings" onClick={() => setSettingsOpen(true)}>
           Settings
         </button>

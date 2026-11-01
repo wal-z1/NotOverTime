@@ -8,6 +8,7 @@ Small, local-first timer app for focused work.
 - Light/dark theme
 - PWA/offline support
 - Notifications and alarms
+- Global sound control in the header, with optional per-timer volume overrides
 
 ## Source layout
 

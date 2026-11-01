@@ -123,6 +123,7 @@ export function sanitizeTimer(timer) {
     sound: String(timer.sound || DEFAULT_SOUND),
     repeatAlarm: timer.repeatAlarm === true,
     soundVolume: Number.isFinite(timer.soundVolume) ? clamp(timer.soundVolume, 0, 1) : 0.7,
+    useGlobalVolume: timer.useGlobalVolume === true,
     state: ['running', 'paused', 'finished'].includes(timer.state) ? timer.state : 'idle',
     endTime: typeof timer.endTime === 'number' ? timer.endTime : null,
     updatedAt: Date.now(),
@@ -130,7 +131,7 @@ export function sanitizeTimer(timer) {
   };
 }
 
-export function buildTimer({ name, totalMs, color, sound, repeatAlarm = false, soundVolume = 0.7 }) {
+export function buildTimer({ name, totalMs, color, sound, repeatAlarm = false, soundVolume = 0.7, useGlobalVolume = true }) {
   return {
     id: crypto.randomUUID(),
     name: String(name || 'Timer'),
@@ -140,6 +141,7 @@ export function buildTimer({ name, totalMs, color, sound, repeatAlarm = false, s
     sound: sound || DEFAULT_SOUND,
     repeatAlarm: repeatAlarm === true,
     soundVolume: clamp(Number(soundVolume), 0, 1),
+    useGlobalVolume: useGlobalVolume === true,
     state: 'idle',
     endTime: null,
     updatedAt: Date.now(),

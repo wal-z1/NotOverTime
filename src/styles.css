@@ -115,6 +115,39 @@ button:active {
   justify-content: flex-end;
 }
 
+.header-sound-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 230px;
+  padding: 6px 8px;
+  background: var(--surface-strong);
+  border: 1px solid var(--outline);
+}
+
+.header-sound-level {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+  font-size: 0.78rem;
+}
+
+.header-sound-level span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-sound-level .range-input {
+  min-height: 24px;
+}
+
+.sound-test-button {
+  min-height: 38px;
+  padding: 0 12px;
+}
+
 .switch-row {
   display: inline-flex;
   align-items: center;
@@ -707,6 +740,15 @@ button:active {
   accent-color: var(--primary);
 }
 
+.range-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.settings-sound-note {
+  margin: 0 0 14px;
+}
+
 .inline-action {
   justify-self: start;
   min-height: 40px;
@@ -860,6 +902,12 @@ button:active {
     justify-content: stretch;
   }
 
+  .header-sound-control {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+  }
+
   .switch-row {
     min-width: 0;
     justify-content: space-between;
@@ -948,6 +996,10 @@ button:active {
 
   .header-actions {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .header-sound-control {
+    grid-column: 1 / -1;
   }
 
   .header-actions .icon-button {

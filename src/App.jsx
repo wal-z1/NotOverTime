@@ -17,7 +17,6 @@ import {
   getDurationMultiplier,
   getDurationUnit,
   getDurationValue,
-  getVolumeDb,
   isValidTimer,
   parseDurationInput,
   pauseTimersForPersistence,
@@ -76,6 +75,7 @@ function App() {
   const alarmIntervalRef = useRef(new Map());
   const finishNoticeRef = useRef(new Set());
   const nextRequestRef = useRef(null);
+  const volumePreviewTimeoutRef = useRef(null);
   const timerCardRefs = useRef(new Map());
 
   const timersById = useMemo(() => Object.fromEntries(timers.map((timer) => [timer.id, timer])), [timers]);
@@ -295,6 +295,7 @@ function App() {
   useEffect(() => () => {
     alarmIntervalRef.current.forEach((interval) => window.clearInterval(interval));
     alarmIntervalRef.current.clear();
+    window.clearTimeout(volumePreviewTimeoutRef.current);
   }, []);
 
   function readStorage(key, fallback) {
@@ -359,7 +360,9 @@ function App() {
     if ('vibrate' in navigator) {
       navigator.vibrate([200, 80, 200, 80, 200]);
     }
-    const volume = Number.isFinite(timer.soundVolume) ? timer.soundVolume : settings.soundVolume || 0.7;
+    const volume = timer.useGlobalVolume
+      ? settings.soundVolume
+      : (Number.isFinite(timer.soundVolume) ? timer.soundVolume : settings.soundVolume || 0.7);
     playAlarm(timer.sound || settings.lastSound || DEFAULT_SOUND, volume);
     if (timer.repeatAlarm) {
       stopAlarm(timer.id);
@@ -411,6 +414,14 @@ function App() {
     playAlarm(name, clamp(Number(volume) || 0, 0, 1));
   }
 
+  function previewGlobalVolume(volume) {
+    setSettings((current) => ({ ...current, soundVolume: clamp(Number(volume) || 0, 0, 1) }));
+    window.clearTimeout(volumePreviewTimeoutRef.current);
+    volumePreviewTimeoutRef.current = window.setTimeout(() => {
+      previewSound(settings.lastSound || DEFAULT_SOUND, volume);
+    }, 180);
+  }
+
   async function installApp() {
     if (!installPrompt) {
       showSnackbar('Use your browser menu and choose “Add to home screen” or “Install app”.');
@@ -434,6 +445,7 @@ function App() {
       sound: timer ? timer.sound : settings.lastSound || DEFAULT_SOUND,
       repeatAlarm: timer ? timer.repeatAlarm === true : false,
       soundVolume: timer && Number.isFinite(timer.soundVolume) ? timer.soundVolume : settings.soundVolume,
+      useGlobalVolume: timer ? timer.useGlobalVolume === true : true,
     });
     setDialogOpen(true);
   }
@@ -567,6 +579,7 @@ function App() {
       sound: timer.sound,
       repeatAlarm: timer.repeatAlarm,
       soundVolume: timer.soundVolume,
+      useGlobalVolume: timer.useGlobalVolume,
     });
     duplicate.id = duplicateId;
     setTimers((current) => [...current, duplicate]);
@@ -606,6 +619,7 @@ function App() {
         sound: draft.sound,
         repeatAlarm: draft.repeatAlarm,
         soundVolume: draft.soundVolume,
+        useGlobalVolume: draft.useGlobalVolume,
       });
       setDialogOpen(false);
       return;
@@ -622,6 +636,7 @@ function App() {
         sound: draft.sound,
         repeatAlarm: draft.repeatAlarm,
         soundVolume: draft.soundVolume,
+        useGlobalVolume: draft.useGlobalVolume,
         elapsedMs: clamp(timer.elapsedMs, 0, totalMs),
         state: timer.state === 'finished' ? 'finished' : timer.state,
       };
@@ -637,6 +652,8 @@ function App() {
         setSettingsOpen={setSettingsOpen}
         setReorderAnnouncement={setReorderAnnouncement}
         toggleSiteNotifications={toggleSiteNotifications}
+        onPreviewSound={previewSound}
+        onVolumeChange={previewGlobalVolume}
       />
 
       <main className="main-shell">
@@ -819,9 +836,6 @@ function App() {
                     <option key={sound} value={sound}>{sound}</option>
                   ))}
                 </select>
-                <button type="button" className="secondary inline-action" onClick={() => previewSound(draft.sound, settings.soundVolume)}>
-                  Test sound
-                </button>
               </label>
 
               <label className="setting-toggle inline-setting">
@@ -848,9 +862,24 @@ function App() {
                   max="1"
                   step="0.01"
                   value={draft.soundVolume}
+                  disabled={draft.useGlobalVolume}
                   aria-label="Timer sound volume"
                   onChange={(event) => setDraft((current) => ({ ...current, soundVolume: Number(event.target.value) }))}
                 />
+              </label>
+              <label className="setting-toggle inline-setting">
+                <span>
+                  <strong>Use app volume</strong>
+                  <small>Follow the global sound level from the header.</small>
+                </span>
+                <button
+                  type="button"
+                  className="switch"
+                  aria-pressed={draft.useGlobalVolume}
+                  onClick={() => setDraft((current) => ({ ...current, useGlobalVolume: !current.useGlobalVolume }))}
+                >
+                  <span className="switch-thumb" />
+                </button>
               </label>
 
               <div className="dialog-actions">
@@ -920,23 +949,9 @@ function App() {
               </button>
             </label>
 
-            <div className="field">
-              <span>Alarm volume <strong>{Math.round(settings.soundVolume * 100)}% ({getVolumeDb(settings.soundVolume)})</strong></span>
-              <small className="field-help">The alarm plays over other audio; your device and browser volume still apply.</small>
-              <input
-                className="range-input"
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={settings.soundVolume}
-                aria-label="Alarm volume"
-                onChange={(event) => setSettings((current) => ({ ...current, soundVolume: Number(event.target.value) }))}
-              />
-              <button type="button" className="secondary inline-action" onClick={() => previewSound(settings.lastSound || DEFAULT_SOUND, settings.soundVolume)}>
-                Test {settings.lastSound || DEFAULT_SOUND}
-              </button>
-            </div>
+            <p className="field-help settings-sound-note">
+              Global alarm volume and the test button are available in the app header.
+            </p>
 
             <div className="install-card">
               <div>
