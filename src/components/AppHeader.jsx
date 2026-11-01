@@ -71,7 +71,7 @@ export default function AppHeader({
               className="range-input"
               type="range"
               min="0"
-              max="1"
+              max="2"
               step="0.01"
               value={settings.soundVolume}
               aria-label="Global alarm volume"

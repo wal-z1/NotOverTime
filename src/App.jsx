@@ -411,14 +411,15 @@ function App() {
   }
 
   function previewSound(name = DEFAULT_SOUND, volume = settings.soundVolume) {
-    playAlarm(name, clamp(Number(volume) || 0, 0, 1));
+    playAlarm(name, clamp(Number(volume) || 0, 0, 2));
   }
 
   function previewGlobalVolume(volume) {
-    setSettings((current) => ({ ...current, soundVolume: clamp(Number(volume) || 0, 0, 1) }));
+    const nextVolume = clamp(Number(volume) || 0, 0, 2);
+    setSettings((current) => ({ ...current, soundVolume: nextVolume }));
     window.clearTimeout(volumePreviewTimeoutRef.current);
     volumePreviewTimeoutRef.current = window.setTimeout(() => {
-      previewSound(settings.lastSound || DEFAULT_SOUND, volume);
+      previewSound(settings.lastSound || DEFAULT_SOUND, nextVolume);
     }, 180);
   }
 
@@ -859,7 +860,7 @@ function App() {
                   className="range-input"
                   type="range"
                   min="0"
-                  max="1"
+                  max="2"
                   step="0.01"
                   value={draft.soundVolume}
                   disabled={draft.useGlobalVolume}
