@@ -21,10 +21,11 @@ export function getDefaultTrackerColor() {
 
 export const TRACKER_COLORS = [
   getDefaultTrackerColor(),
-  '#6750a4',
-  '#ff9800',
-  '#4caf50',
-  '#2196f3',
-  '#e91e63',
-  '#00acc1',
+  '#5b4bb7',
+  '#c96a00',
+  '#2f8f46',
+  '#1976b8',
+  '#c43d76',
+  '#008b9a',
+  '#8a4f9e',
 ];

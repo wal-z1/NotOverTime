@@ -39,6 +39,7 @@ export default function TimerCard({
       tabIndex="0"
       aria-label={`${timer.name} timer. Press Space to start or pause.`}
       ref={cardRef}
+      style={{ '--timer-color': timer.color }}
       onFocus={onFocus}
       className={`timer-card ${timer.state} ${selected ? 'selected' : ''} ${highlighted ? 'timer-card-highlight' : ''} ${dragging ? 'dragging' : ''} ${dropTarget ? `drop-${dropTarget}` : ''}`}
       onDragOver={onDragOver}

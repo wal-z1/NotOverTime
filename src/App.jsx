@@ -113,11 +113,11 @@ function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : settings.theme;
-    document.documentElement.style.setProperty('--primary', settings.trackerColor || getDefaultTrackerColor());
+    document.documentElement.style.setProperty('--app-accent', settings.trackerColor || getDefaultTrackerColor());
   }, [settings.theme]);
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--primary', settings.trackerColor || getDefaultTrackerColor());
+    document.documentElement.style.setProperty('--app-accent', settings.trackerColor || getDefaultTrackerColor());
   }, [settings.trackerColor]);
 
   useEffect(() => {
