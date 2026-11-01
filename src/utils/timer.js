@@ -26,7 +26,13 @@ export function parseDurationInput(raw) {
   if (!value) return 0;
   const parts = value.split(':').map((part) => part.replace(/[^0-9]/g, ''));
   if (parts.length === 1) {
-    return clamp(Number(parts[0]) || 0, 0, MAX_DURATION_SECONDS);
+    const digits = parts[0];
+    if (!digits) return 0;
+    const clockDigits = digits.padStart(6, '0').slice(-6);
+    const hours = Number(clockDigits.slice(0, 2)) || 0;
+    const minutes = Number(clockDigits.slice(2, 4)) || 0;
+    const seconds = Number(clockDigits.slice(4, 6)) || 0;
+    return clamp(hours * 3600 + minutes * 60 + seconds, 0, MAX_DURATION_SECONDS);
   }
   let total = 0;
   [...parts].reverse().forEach((part, index) => {
