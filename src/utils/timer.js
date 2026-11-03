@@ -82,6 +82,53 @@ export function getTimerDisplay(timer) {
   };
 }
 
+export function getTimerEndTime(timer, now = Date.now()) {
+  if (timer.state === 'running' && typeof timer.endTime === 'number') return timer.endTime;
+  if (timer.state === 'paused') return now + Math.max(0, timer.totalMs - timer.elapsedMs);
+  if (timer.state === 'scheduled' && typeof timer.startTime === 'number') {
+    return timer.startTime + timer.totalMs;
+  }
+  return null;
+}
+
+export function formatLocalTime(timestamp) {
+  if (!Number.isFinite(timestamp)) return '';
+  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(timestamp));
+}
+
+export function formatClockInput(timestamp) {
+  if (!Number.isFinite(timestamp)) return '';
+  const date = new Date(timestamp);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+export function getClockTimeTimestamp(value, base = Date.now()) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  const date = new Date(base);
+  date.setHours(hours, minutes, 0, 0);
+  return date.getTime();
+}
+
+export function getClockRangeTimestamps(fromValue, toValue, base = Date.now()) {
+  const from = getClockTimeTimestamp(fromValue, base);
+  let to = getClockTimeTimestamp(toValue, base);
+  if (!from || !to) return null;
+  const crossesDay = to <= from;
+  if (crossesDay) to += 24 * 60 * 60 * 1000;
+  return { from, to, durationMs: to - from, crossesDay };
+}
+
+export function getTimerDeltaMs(referenceTimer, timer, now = Date.now()) {
+  const referenceEnd = getTimerEndTime(referenceTimer, now);
+  const end = getTimerEndTime(timer, now);
+  if (!referenceEnd || !end || referenceTimer.state === 'paused' || timer.state === 'paused') return null;
+  return end - referenceEnd;
+}
+
 export function getDefaultSettings() {
   const defaultColor = getDefaultTrackerColor();
   return {
@@ -114,7 +161,7 @@ export function isValidTimer(timer) {
   if (!Number.isFinite(timer.totalMs) || timer.totalMs <= 0) return false;
   if (!Number.isFinite(timer.elapsedMs) || timer.elapsedMs < 0) return false;
   if (timer.elapsedMs > timer.totalMs) return false;
-  return ['idle', 'running', 'paused', 'finished'].includes(timer.state);
+  return ['idle', 'running', 'paused', 'finished', 'scheduled'].includes(timer.state);
 }
 
 export function sanitizeTimer(timer) {
@@ -130,14 +177,18 @@ export function sanitizeTimer(timer) {
     repeatAlarm: timer.repeatAlarm === true,
     soundVolume: Number.isFinite(timer.soundVolume) ? clamp(timer.soundVolume, 0, 2) : 0.7,
     useGlobalVolume: timer.useGlobalVolume === true,
-    state: ['running', 'paused', 'finished'].includes(timer.state) ? timer.state : 'idle',
+    state: ['running', 'paused', 'finished', 'scheduled'].includes(timer.state) ? timer.state : 'idle',
     endTime: typeof timer.endTime === 'number' ? timer.endTime : null,
-    updatedAt: Date.now(),
+    updatedAt: typeof timer.updatedAt === 'number' ? timer.updatedAt : Date.now(),
     finishedAt: typeof timer.finishedAt === 'number' ? timer.finishedAt : null,
+    startTime: typeof timer.startTime === 'number' ? timer.startTime : null,
+    clockMode: timer.clockMode === true,
+    clockFrom: typeof timer.clockFrom === 'number' ? timer.clockFrom : null,
+    clockTo: typeof timer.clockTo === 'number' ? timer.clockTo : null,
   };
 }
 
-export function buildTimer({ name, totalMs, color, sound, repeatAlarm = false, soundVolume = 0.7, useGlobalVolume = true }) {
+export function buildTimer({ name, totalMs, color, sound, repeatAlarm = false, soundVolume = 0.7, useGlobalVolume = true, startTime = null, clockMode = false, clockFrom = null, clockTo = null }) {
   return {
     id: crypto.randomUUID(),
     name: String(name || 'Timer'),
@@ -148,8 +199,12 @@ export function buildTimer({ name, totalMs, color, sound, repeatAlarm = false, s
     repeatAlarm: repeatAlarm === true,
     soundVolume: clamp(Number(soundVolume), 0, 2),
     useGlobalVolume: useGlobalVolume === true,
-    state: 'idle',
+    state: startTime && startTime > Date.now() ? 'scheduled' : 'idle',
     endTime: null,
+    startTime,
+    clockMode,
+    clockFrom,
+    clockTo,
     updatedAt: Date.now(),
     finishedAt: null,
   };
@@ -172,12 +227,45 @@ export function pauseTimersForPersistence(timers, now = Date.now()) {
 }
 
 export function resetTimersForLoad(timers) {
-  return timers.map((timer) => ({
+  return timers.map((timer) => ({ ...timer }));
+}
+
+export function reconcileTimer(timer, now = Date.now()) {
+  if (timer.state === 'scheduled' && typeof timer.startTime === 'number') {
+    if (timer.startTime > now) return timer;
+    const endTime = timer.startTime + timer.totalMs;
+    if (endTime <= now) {
+      return {
+        ...timer,
+        elapsedMs: timer.totalMs,
+        state: 'finished',
+        endTime: null,
+        startTime: null,
+        finishedAt: timer.finishedAt || endTime,
+        updatedAt: now,
+      };
+    }
+    return { ...timer, state: 'running', endTime, startTime: null, updatedAt: now };
+  }
+
+  if (timer.state !== 'running' || typeof timer.endTime !== 'number') return timer;
+  if (timer.endTime <= now) {
+    return {
+      ...timer,
+      elapsedMs: timer.totalMs,
+      state: 'finished',
+      endTime: null,
+      finishedAt: timer.finishedAt || timer.endTime,
+      updatedAt: now,
+    };
+  }
+
+  return {
     ...timer,
-    elapsedMs: 0,
-    state: 'idle',
-    endTime: null,
-    finishedAt: null,
-    updatedAt: Date.now(),
-  }));
+    elapsedMs: clamp(timer.totalMs - (timer.endTime - now), 0, timer.totalMs),
+  };
+}
+
+export function reconcileTimers(timers, now = Date.now()) {
+  return timers.map((timer) => reconcileTimer(timer, now));
 }

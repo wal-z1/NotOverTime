@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   DEFAULT_SOUND,
   DEMO_PRESETS,
+  GITHUB_REPO_URL,
   MAX_DURATION_MS,
   MAX_TIMERS,
   SOUND_OPTIONS,
@@ -13,6 +14,12 @@ import {
   buildTimer,
   clamp,
   formatDuration,
+  formatClockInput,
+  formatLocalTime,
+  getClockRangeTimestamps,
+  getClockTimeTimestamp,
+  getTimerDeltaMs,
+  getTimerEndTime,
   getDurationMilliseconds,
   getDurationMultiplier,
   getDurationUnit,
@@ -20,6 +27,8 @@ import {
   isValidTimer,
   parseDurationInput,
   pauseTimersForPersistence,
+  reconcileTimer,
+  reconcileTimers,
   resetTimersForLoad,
   safeParse,
   sanitizeTimer,
@@ -31,6 +40,7 @@ import TimerCard from './components/TimerCard';
 
 function App() {
   const [timers, setTimers] = useState([]);
+  const [timersHydrated, setTimersHydrated] = useState(false);
   const [settings, setSettings] = useState(() => {
     try {
       const stored = localStorage.getItem(`${STORAGE_PREFIX}.settings`);
@@ -55,6 +65,11 @@ function App() {
   const [selectedTimerId, setSelectedTimerId] = useState(null);
   const [highlightedTimerId, setHighlightedTimerId] = useState(null);
   const [stoppedAlarmIds, setStoppedAlarmIds] = useState(() => new Set());
+  const [referenceTimerId, setReferenceTimerId] = useState(null);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compareIds, setCompareIds] = useState([]);
+  const [compareNow, setCompareNow] = useState(Date.now());
+  const [moreOptionsOpen, setMoreOptionsOpen] = useState(false);
   const [draggingTimerId, setDraggingTimerId] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
   const [reorderAnnouncement, setReorderAnnouncement] = useState('');
@@ -66,6 +81,10 @@ function App() {
     sound: DEFAULT_SOUND,
     repeatAlarm: false,
     soundVolume: 0.7,
+    useGlobalVolume: true,
+    clockMode: false,
+    clockFrom: null,
+    clockTo: null,
   });
   const [storageWarning, setStorageWarning] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
@@ -79,8 +98,10 @@ function App() {
   const nextRequestRef = useRef(null);
   const volumePreviewTimeoutRef = useRef(null);
   const timerCardRefs = useRef(new Map());
+  const timerStatesRef = useRef(new Map());
   const dialogRef = useRef(null);
   const settingsDialogRef = useRef(null);
+  const compareDialogRef = useRef(null);
 
   const timersById = useMemo(() => Object.fromEntries(timers.map((timer) => [timer.id, timer])), [timers]);
 
@@ -90,13 +111,28 @@ function App() {
   }, [selectedTimerId, timers, timersById]);
 
   useEffect(() => {
+    timers.forEach((timer) => {
+      const previousState = timerStatesRef.current.get(timer.id);
+      if (timer.state === 'finished' && ['running', 'scheduled'].includes(previousState)) {
+        queueFinishNotification(timer);
+      }
+      timerStatesRef.current.set(timer.id, timer.state);
+    });
+    const ids = new Set(timers.map((timer) => timer.id));
+    timerStatesRef.current.forEach((_, id) => {
+      if (!ids.has(id)) timerStatesRef.current.delete(id);
+    });
+  }, [timers]);
+
+  useEffect(() => {
     const keyboardHandler = (event) => {
       if (event.key === 'Escape') {
         if (editingTimeId) {
           cancelTimeEdit();
-        } else if (dialogOpen || settingsOpen) {
+        } else if (dialogOpen || settingsOpen || compareOpen) {
           setDialogOpen(false);
           setSettingsOpen(false);
+          setCompareOpen(false);
         }
         return;
       }
@@ -113,15 +149,17 @@ function App() {
 
     window.addEventListener('keydown', keyboardHandler);
     return () => window.removeEventListener('keydown', keyboardHandler);
-  }, [dialogOpen, editingTimeId, selectedTimerId, settingsOpen, timersById]);
+  }, [compareOpen, dialogOpen, editingTimeId, selectedTimerId, settingsOpen, timersById]);
 
   useEffect(() => {
-    const panel = dialogOpen ? dialogRef.current : settingsOpen ? settingsDialogRef.current : null;
+    const panel = dialogOpen ? dialogRef.current : settingsOpen ? settingsDialogRef.current : compareOpen ? compareDialogRef.current : null;
     if (!panel) return undefined;
 
     const focusableSelector = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
     const focusable = () => [...panel.querySelectorAll(focusableSelector)];
-    const initialFocus = focusable()[0];
+    const initialFocus = dialogOpen
+      ? panel.querySelector('input[type="text"]') || focusable()[0]
+      : focusable()[0];
     window.requestAnimationFrame(() => initialFocus?.focus());
 
     const trapFocus = (event) => {
@@ -141,7 +179,7 @@ function App() {
 
     panel.addEventListener('keydown', trapFocus);
     return () => panel.removeEventListener('keydown', trapFocus);
-  }, [dialogOpen, settingsOpen]);
+  }, [compareOpen, dialogOpen, settingsOpen]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : settings.theme;
@@ -155,8 +193,38 @@ function App() {
   useEffect(() => {
     const saved = readStorage('timers', []);
     const valid = Array.isArray(saved) ? saved.filter(isValidTimer).map(sanitizeTimer) : [];
-    const safe = resetTimersForLoad(valid.slice(0, MAX_TIMERS));
-    setTimers(safe);
+    const loaded = resetTimersForLoad(valid.slice(0, MAX_TIMERS));
+    const reconciled = reconcileTimers(loaded);
+    setTimers(reconciled);
+    setTimersHydrated(true);
+    reconciled.forEach((timer, index) => {
+      const previous = loaded[index];
+      if (previous && ['running', 'scheduled'].includes(previous.state) && timer.state === 'finished') {
+        queueFinishNotification(timer);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    const reconcile = () => {
+      setTimers((current) => {
+        const next = current.map((timer) => {
+          const reconciled = reconcileTimer(timer);
+          if (['running', 'scheduled'].includes(timer.state) && reconciled.state === 'finished') {
+            queueFinishNotification(reconciled);
+          }
+          return reconciled;
+        });
+        return next.some((timer, index) => timer !== current[index]) ? next : current;
+      });
+    };
+
+    window.addEventListener('focus', reconcile);
+    document.addEventListener('visibilitychange', reconcile);
+    return () => {
+      window.removeEventListener('focus', reconcile);
+      document.removeEventListener('visibilitychange', reconcile);
+    };
   }, []);
 
   useEffect(() => {
@@ -181,30 +249,19 @@ function App() {
       setTimers((current) => {
         let changed = false;
         const updated = current.map((timer) => {
-          if (timer.state !== 'running' || !timer.endTime) return timer;
-          const remaining = Math.max(0, timer.endTime - Date.now());
-          if (remaining <= 0) {
+          const reconciled = reconcileTimer(timer);
+          if (reconciled.state === 'finished' && timer.state !== 'finished') {
             changed = true;
             setStoppedAlarmIds((currentIds) => {
               const nextIds = new Set(currentIds);
               nextIds.delete(timer.id);
               return nextIds;
             });
-            const endedTimer = {
-              ...timer,
-              elapsedMs: timer.totalMs,
-              state: 'finished',
-              endTime: null,
-              finishedAt: Date.now(),
-            };
-            queueFinishNotification(endedTimer);
-            return endedTimer;
+            queueFinishNotification(reconciled);
+            return reconciled;
           }
-          const elapsedMs = clamp(timer.totalMs - remaining, 0, timer.totalMs);
-          if (elapsedMs !== timer.elapsedMs) {
-            changed = true;
-          }
-          return { ...timer, elapsedMs };
+          if (reconciled !== timer) changed = true;
+          return reconciled;
         });
         if (!changed) return current;
         return updated;
@@ -213,7 +270,7 @@ function App() {
 
     const schedule = () => {
       cancelAnimationFrame(tickerRef.current);
-      const shouldAnimate = timers.some((timer) => timer.state === 'running');
+        const shouldAnimate = timers.some((timer) => timer.state === 'running' || timer.state === 'scheduled');
       if (shouldAnimate) {
         tickerRef.current = requestAnimationFrame(function loop() {
           tick();
@@ -240,6 +297,24 @@ function App() {
   }, [timers]);
 
   useEffect(() => {
+    if (!compareOpen) return undefined;
+    const interval = window.setInterval(() => setCompareNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [compareOpen]);
+
+  useEffect(() => {
+    if (referenceTimerId && !timers.some((timer) => timer.id === referenceTimerId && ['running', 'scheduled'].includes(timer.state))) {
+      setReferenceTimerId(null);
+    }
+  }, [referenceTimerId, timers]);
+
+  useEffect(() => {
+    if (!compareOpen) return;
+    setCompareIds((current) => current.filter((id) => timers.some((timer) => timer.id === id)));
+  }, [compareOpen, timers]);
+
+  useEffect(() => {
+    if (!timersHydrated) return undefined;
     const persistTimers = () => {
       try {
         localStorage.setItem(`${STORAGE_PREFIX}.timers`, JSON.stringify(timers));
@@ -264,7 +339,7 @@ function App() {
       clearTimeout(debounced);
       window.removeEventListener('pagehide', onPageHide);
     };
-  }, [timers]);
+  }, [timers, timersHydrated]);
 
   useEffect(() => {
     try {
@@ -392,6 +467,7 @@ function App() {
 
   function queueFinishNotification(timer) {
     if (!timer || timer.state !== 'finished') return;
+    if (finishNoticeRef.current.has(timer.id)) return;
     finishNoticeRef.current.add(timer.id);
     showSnackbar(`${timer.name} is done.`);
     const shouldNotify = settings.siteNotifications && 'Notification' in window && Notification.permission === 'granted';
@@ -492,6 +568,7 @@ function App() {
     const durationSeconds = timer ? timer.totalMs / 1000 : 25 * 60;
     const durationUnit = timer ? getDurationUnit(durationSeconds) : 'minutes';
     setEditingId(timer ? timer.id : null);
+    setMoreOptionsOpen(false);
     setDraft({
       name: timer ? timer.name : '',
       duration: getDurationValue(durationSeconds, durationUnit),
@@ -501,6 +578,9 @@ function App() {
       repeatAlarm: timer ? timer.repeatAlarm === true : false,
       soundVolume: timer && Number.isFinite(timer.soundVolume) ? timer.soundVolume : settings.soundVolume,
       useGlobalVolume: timer ? timer.useGlobalVolume === true : true,
+      clockMode: timer ? timer.clockMode === true : false,
+      clockFrom: timer?.clockFrom || null,
+      clockTo: timer?.clockTo || null,
     });
     setDialogOpen(true);
   }
@@ -569,6 +649,14 @@ function App() {
       const next = { ...timer, state: 'running', endTime: Date.now() + remainingMs, updatedAt: Date.now() };
       return next;
     }));
+  }
+
+  function getCompareTimers() {
+    return timers
+      .filter((timer) => ['running', 'scheduled', 'paused'].includes(timer.state))
+      .map((timer) => ({ timer, endTime: getTimerEndTime(timer, compareNow), paused: timer.state === 'paused' }))
+      .filter((entry) => entry.endTime)
+      .sort((a, b) => a.endTime - b.endTime);
   }
 
   function pauseTimer(timerId) {
@@ -679,13 +767,47 @@ function App() {
     persistStorage('timers', []);
   }
 
+  function setClockMode(enabled) {
+    if (!enabled) {
+      setDraft((current) => ({ ...current, clockMode: false }));
+      return;
+    }
+    const from = draft.clockFrom || Date.now();
+    const to = draft.clockTo || (from + getDurationMilliseconds(draft.duration, draft.durationUnit || 'minutes'));
+    setDraft((current) => ({ ...current, clockMode: true, clockFrom: from, clockTo: to }));
+  }
+
+  function updateClockTime(field, value) {
+    const base = field === 'from' ? (draft.clockFrom || Date.now()) : (draft.clockTo || Date.now());
+    const timestamp = getClockTimeTimestamp(value, base);
+    if (!timestamp) return;
+    const currentFrom = field === 'from' ? timestamp : (draft.clockFrom || Date.now());
+    const currentTo = field === 'to' ? timestamp : (draft.clockTo || currentFrom + 15 * 60 * 1000);
+    const range = getClockRangeTimestamps(formatClockInput(currentFrom), formatClockInput(currentTo), currentFrom);
+    if (!range) return;
+    const seconds = clamp(Math.round(range.durationMs / 1000), 1, MAX_DURATION_MS / 1000);
+    setDraft((current) => ({
+      ...current,
+      clockFrom: range.from,
+      clockTo: range.to,
+      duration: getDurationValue(seconds, current.durationUnit || 'minutes'),
+    }));
+  }
+
+  const draftClockDurationMs = draft.clockMode && draft.clockFrom && draft.clockTo
+    ? draft.clockTo - draft.clockFrom
+    : getDurationMilliseconds(draft.duration, draft.durationUnit || 'minutes');
+  const draftDurationValid = Number.isFinite(draftClockDurationMs)
+    && draftClockDurationMs >= 1000
+    && draftClockDurationMs <= MAX_DURATION_MS;
+  const clockCrossesDay = draft.clockMode && draft.clockFrom && draft.clockTo && draft.clockTo > draft.clockFrom
+    && new Date(draft.clockTo).getDate() !== new Date(draft.clockFrom).getDate();
+
   function handleSubmit(event) {
     event.preventDefault();
-    const totalMs = clamp(
-      getDurationMilliseconds(draft.duration, draft.durationUnit || 'minutes'),
-      1000,
-      MAX_DURATION_MS
-    );
+    const totalMs = clamp(draft.clockMode && draft.clockFrom && draft.clockTo
+      ? draft.clockTo - draft.clockFrom
+      : getDurationMilliseconds(draft.duration, draft.durationUnit || 'minutes'), 1000, MAX_DURATION_MS);
     if (!editingId) {
       addTimer({
         name: draft.name.trim() || `Timer ${timers.length + 1}`,
@@ -695,6 +817,10 @@ function App() {
         repeatAlarm: draft.repeatAlarm,
         soundVolume: draft.soundVolume,
         useGlobalVolume: draft.useGlobalVolume,
+        startTime: draft.clockMode && draft.clockFrom > Date.now() ? draft.clockFrom : null,
+        clockMode: draft.clockMode,
+        clockFrom: draft.clockFrom,
+        clockTo: draft.clockTo,
       });
       setDialogOpen(false);
       return;
@@ -712,12 +838,21 @@ function App() {
         repeatAlarm: draft.repeatAlarm,
         soundVolume: draft.soundVolume,
         useGlobalVolume: draft.useGlobalVolume,
+        startTime: draft.clockMode && draft.clockFrom > Date.now() ? draft.clockFrom : null,
+        clockMode: draft.clockMode,
+        clockFrom: draft.clockFrom,
+        clockTo: draft.clockTo,
         elapsedMs: clamp(timer.elapsedMs, 0, totalMs),
-        state: timer.state === 'finished' ? 'finished' : timer.state,
+        state: draft.clockMode && draft.clockFrom > Date.now() ? 'scheduled' : (timer.state === 'finished' ? 'finished' : timer.state),
       };
     }));
     setDialogOpen(false);
   }
+
+  const compareTimers = getCompareTimers();
+  const selectedCompareTimers = compareTimers.filter(({ timer }) => compareIds.includes(timer.id));
+  const compareStart = Math.min(compareNow, ...selectedCompareTimers.map(({ endTime }) => endTime - 1));
+  const compareSpan = Math.max(1000, ...selectedCompareTimers.map(({ endTime }) => endTime - compareStart));
 
   return (
     <>
@@ -729,6 +864,12 @@ function App() {
         toggleSiteNotifications={toggleSiteNotifications}
         onPreviewSound={previewSound}
         onVolumeChange={previewGlobalVolume}
+        compareVisible={timers.length > 1 && !settings.compactMode}
+        onOpenCompare={() => {
+          setCompareIds((current) => current.length ? current : timers.filter((timer) => ['running', 'scheduled'].includes(timer.state)).map((timer) => timer.id));
+          setCompareNow(Date.now());
+          setCompareOpen(true);
+        }}
       />
 
       <main className="main-shell">
@@ -763,6 +904,16 @@ function App() {
                 selected={selectedTimerId === timer.id}
                 highlighted={highlightedTimerId === timer.id}
                 alarmStopped={stoppedAlarmIds.has(timer.id)}
+                reference={referenceTimerId === timer.id}
+                compareDelta={referenceTimerId && referenceTimerId !== timer.id ? (() => {
+                  const ref = timersById[referenceTimerId];
+                  const refEnd = ref ? getTimerEndTime(ref, Date.now()) : null;
+                  const end = getTimerEndTime(timer, Date.now());
+                  return refEnd && end && ['running', 'scheduled'].includes(timer.state) ? getTimerDeltaMs(ref, timer, Date.now()) : null;
+                })() : null}
+                compareReferenceName={referenceTimerId ? timersById[referenceTimerId]?.name : null}
+                endTime={getTimerEndTime(timer, Date.now())}
+                startTime={timer.startTime}
                 dragging={draggingTimerId === timer.id}
                 dropTarget={dropTarget?.id === timer.id ? dropTarget.position : null}
                 editingTime={editingTimeId === timer.id}
@@ -770,6 +921,7 @@ function App() {
                 timeInputRef={timeInputRef}
                 onFocus={() => setSelectedTimerId(timer.id)}
                 onOpenEditor={() => openCreateDialog(timer)}
+                onCompare={() => setReferenceTimerId(timer.id)}
                 onBeginTimeEdit={() => beginTimeEdit(timer)}
                 onCancelTimeEdit={cancelTimeEdit}
                 onSaveTimeEdit={() => saveTimeEdit(timer)}
@@ -823,9 +975,9 @@ function App() {
           <p className="sr-only" role="status" aria-live="polite">{reorderAnnouncement}</p>
         ) : null}
         <footer className="app-footer" aria-label="Project links">
-          <a href="https://github.com/wal-z1/NotOverTime" target="_blank" rel="noreferrer">
-            View NotOverTime on GitHub
-          </a>
+          <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer">View NotOverTime on GitHub</a>
+          <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer" aria-label="Star NotOverTime on GitHub">Star</a>
+          <a href={`${GITHUB_REPO_URL}/issues/new/choose`} target="_blank" rel="noopener noreferrer" aria-label="Report an issue on GitHub">Report an issue</a>
         </footer>
       </main>
 
@@ -835,7 +987,7 @@ function App() {
 
       {dialogOpen ? (
         <div
-          className="dialog-overlay"
+          className="dialog-overlay edit-overlay"
           role="dialog"
           aria-modal="true"
           aria-labelledby="timer-dialog-title"
@@ -856,35 +1008,35 @@ function App() {
               </label>
 
               <div className="field">
-                <span>Duration</span>
-                <div className="duration-input-row">
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="any"
-                    value={draft.duration}
-                    onChange={(event) => setDraft((current) => ({ ...current, duration: event.target.value }))}
-                  />
-                  <select
-                    aria-label="Duration unit"
-                    value={draft.durationUnit || 'minutes'}
-                    onChange={(event) => setDraft((current) => {
+                <span className="editor-mode-row">
+                  <strong>Time</strong>
+                  <span className="segmented-control" role="group" aria-label="Timer mode">
+                    <button type="button" className={!draft.clockMode ? 'selected' : ''} aria-pressed={!draft.clockMode} onClick={() => setClockMode(false)}>Duration</button>
+                    <button type="button" className={draft.clockMode ? 'selected' : ''} aria-pressed={draft.clockMode} onClick={() => setClockMode(true)}>Clock time</button>
+                  </span>
+                </span>
+                {draft.clockMode ? (
+                  <div className="clock-time-row">
+                    <label>From <input type="time" value={draft.clockFrom ? formatClockInput(draft.clockFrom) : ''} onChange={(event) => updateClockTime('from', event.target.value)} /></label>
+                    <span aria-hidden="true">→</span>
+                    <label>To <input type="time" value={draft.clockTo ? formatClockInput(draft.clockTo) : ''} onChange={(event) => updateClockTime('to', event.target.value)} /></label>
+                    <small>{formatDuration(Math.max(0, (draft.clockTo || 0) - (draft.clockFrom || 0)) / 1000)} {clockCrossesDay ? <span className="day-badge">+1 day</span> : null}</small>
+                  </div>
+                ) : (
+                  <div className="duration-input-row">
+                    <input type="number" inputMode="decimal" min="0" step="any" value={draft.duration} onChange={(event) => setDraft((current) => ({ ...current, duration: event.target.value }))} />
+                    <select aria-label="Duration unit" value={draft.durationUnit || 'minutes'} onChange={(event) => setDraft((current) => {
                       const oldMultiplier = getDurationMultiplier(current.durationUnit || 'minutes');
                       const seconds = (Number(current.duration) || 0) * oldMultiplier;
                       const nextUnit = event.target.value;
-                      return {
-                        ...current,
-                        durationUnit: nextUnit,
-                        duration: getDurationValue(seconds, nextUnit),
-                      };
-                    })}
-                  >
-                    <option value="seconds">Seconds</option>
-                    <option value="minutes">Minutes</option>
-                    <option value="hours">Hours</option>
-                  </select>
-                </div>
+                      return { ...current, durationUnit: nextUnit, duration: getDurationValue(seconds, nextUnit) };
+                    })}>
+                      <option value="seconds">Seconds</option>
+                      <option value="minutes">Minutes</option>
+                      <option value="hours">Hours</option>
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div className="field">
@@ -911,16 +1063,18 @@ function App() {
                 </div>
               </div>
 
-              <label className="field">
+              <button type="button" className="more-options-button" aria-expanded={moreOptionsOpen} onClick={() => setMoreOptionsOpen((open) => !open)}>
+                {moreOptionsOpen ? 'Less' : 'More'} options
+              </button>
+
+              {moreOptionsOpen ? <label className="field">
                 <span>Alarm sound</span>
                 <select value={draft.sound} onChange={(event) => setDraft((current) => ({ ...current, sound: event.target.value }))}>
-                  {SOUND_OPTIONS.map((sound) => (
-                    <option key={sound} value={sound}>{sound}</option>
-                  ))}
+                  {SOUND_OPTIONS.map((sound) => <option key={sound} value={sound}>{sound}</option>)}
                 </select>
-              </label>
+              </label> : null}
 
-              <label className="setting-toggle inline-setting">
+              {moreOptionsOpen ? <label className="setting-toggle inline-setting">
                 <span>
                   <strong>Repeat until stopped</strong>
                   <small>Keep playing the alarm every 3 seconds.</small>
@@ -933,9 +1087,9 @@ function App() {
                 >
                   <span className="switch-thumb" />
                 </button>
-              </label>
+              </label> : null}
 
-              <label className="field">
+              {moreOptionsOpen ? <label className="field">
                 <span>Timer sound volume <strong>{Math.round(draft.soundVolume * 100)}%</strong></span>
                 <input
                   className="range-input"
@@ -948,8 +1102,8 @@ function App() {
                   aria-label="Timer sound volume"
                   onChange={(event) => setDraft((current) => ({ ...current, soundVolume: Number(event.target.value) }))}
                 />
-              </label>
-              <label className="setting-toggle inline-setting">
+              </label> : null}
+              {moreOptionsOpen ? <label className="setting-toggle inline-setting">
                 <span>
                   <strong>Use app volume</strong>
                   <small>Follow the global sound level from the header.</small>
@@ -962,11 +1116,11 @@ function App() {
                 >
                   <span className="switch-thumb" />
                 </button>
-              </label>
+              </label> : null}
 
               <div className="dialog-actions">
                 <button type="button" className="secondary" onClick={() => setDialogOpen(false)}>Cancel</button>
-                <button type="submit" className="primary">{editingId ? 'Save' : 'Create'}</button>
+                <button type="submit" className="primary" disabled={!draftDurationValid} title={draftDurationValid ? '' : 'Enter a duration between 1 second and the maximum allowed duration.'}>{editingId ? 'Save' : 'Create'}</button>
               </div>
             </form>
           </div>
@@ -1049,6 +1203,38 @@ function App() {
 
             <div className="dialog-actions">
               <button type="button" className="primary" onClick={() => setSettingsOpen(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {compareOpen ? (
+        <div className="dialog-overlay compare-overlay" role="dialog" aria-modal="true" aria-labelledby="compare-dialog-title" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setCompareOpen(false);
+        }}>
+          <div className="dialog-panel compare-panel" ref={compareDialogRef}>
+            <div className="dialog-header">
+              <h2 id="compare-dialog-title">Compare</h2>
+              <button type="button" className="close-button" onClick={() => setCompareOpen(false)}>×</button>
+            </div>
+            <div className="compare-axis">now <span /> time</div>
+            <div className="compare-lanes">
+              {compareTimers.map(({ timer, endTime }, index) => {
+                const included = compareIds.includes(timer.id);
+                const width = Math.max(4, ((endTime - compareStart) / compareSpan) * 100);
+                const previous = compareTimers[index - 1];
+                return (
+                  <div className="compare-lane" key={timer.id}>
+                    <label className="compare-lane-label">
+                      <input type="checkbox" checked={included} onChange={() => setCompareIds((current) => included ? current.filter((id) => id !== timer.id) : [...current, timer.id])} />
+                      <span>{timer.name}</span>
+                    </label>
+                    <div className="compare-bar-track"><span className="compare-bar" style={{ width: `${width}%`, backgroundColor: timer.color }} /></div>
+                    <strong>{timer.state === 'paused' ? 'paused' : formatLocalTime(endTime)}</strong>
+                    {previous && timer.state !== 'paused' && previous.timer.state !== 'paused' ? <small>{formatDuration(Math.max(0, endTime - previous.endTime) / 1000)}</small> : null}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

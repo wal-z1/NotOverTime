@@ -8,6 +8,8 @@ export default function AppHeader({
   toggleSiteNotifications,
   onPreviewSound,
   onVolumeChange,
+  compareVisible,
+  onOpenCompare,
 }) {
   const toggleSetting = (key) => {
     setSettings((current) => ({ ...current, [key]: !current[key] }));
@@ -93,6 +95,7 @@ export default function AppHeader({
         >
           {settings.theme === 'dark' ? 'Light' : 'Dark'}
         </button>
+        {compareVisible ? <button type="button" className="icon-button" onClick={onOpenCompare}>Compare</button> : null}
       </div>
     </header>
   );

@@ -1,4 +1,5 @@
 export const STORAGE_PREFIX = 'timers.v1';
+export const GITHUB_REPO_URL = 'https://github.com/wal-z1/NotOverTime';
 export const MAX_TIMERS = 50;
 export const MAX_DURATION_SECONDS = 99 * 60 * 60 + 59 * 60 + 59;
 export const MAX_DURATION_MS = MAX_DURATION_SECONDS * 1000;

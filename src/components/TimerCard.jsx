@@ -1,4 +1,4 @@
-import { formatDuration, getTimerDisplay } from '../utils/timer';
+import { formatDuration, formatLocalTime, getTimerDisplay } from '../utils/timer';
 import Icon from './Icon';
 
 export default function TimerCard({
@@ -9,6 +9,11 @@ export default function TimerCard({
   selected,
   highlighted,
   alarmStopped,
+  reference,
+  compareDelta,
+  compareReferenceName,
+  endTime,
+  startTime,
   dragging,
   dropTarget,
   editingTime,
@@ -16,6 +21,7 @@ export default function TimerCard({
   timeInputRef,
   onFocus,
   onOpenEditor,
+  onCompare,
   onBeginTimeEdit,
   onCancelTimeEdit,
   onSaveTimeEdit,
@@ -68,8 +74,9 @@ export default function TimerCard({
             </div>
           </div>
         ) : null}
-        <h3>{timer.name}</h3>
+        <h3>{timer.name} {reference ? <span className="ref-tag" aria-label="Reference timer">REF</span> : null}</h3>
         {!compactMode ? <button type="button" className="mini-button secondary" onClick={onOpenEditor}>Edit</button> : null}
+        {!compactMode ? <button type="button" className="mini-button secondary" onClick={onCompare}>Compare</button> : null}
       </div>
 
       <div className={`timer-visual ${compactMode ? 'compact-hidden' : ''}`} style={{ '--ring-color': timer.color }}>
@@ -99,11 +106,24 @@ export default function TimerCard({
             }}
           />
         ) : (
-          <button type="button" className="remaining-time" aria-label={`Edit ${timer.name} remaining time`} onClick={onBeginTimeEdit}>
-            {formatDuration(remainingMs / 1000)}
-          </button>
+          <>
+            <button type="button" className="remaining-time" aria-label={`Edit ${timer.name} remaining time`} onClick={onBeginTimeEdit}>
+              {formatDuration(remainingMs / 1000)}
+            </button>
+            {compareDelta !== null && compareDelta !== undefined ? (
+              <span className="delta-chip" title={`Finishes ${Math.abs(Math.round(compareDelta / 1000))} seconds ${compareDelta < 0 ? `before ${compareReferenceName}` : `after ${compareReferenceName}`}`}>
+                {compareDelta < 0 ? '-' : '+'}{formatDuration(Math.abs(compareDelta) / 1000)}
+              </span>
+            ) : null}
+          </>
         )}
-        {!compactMode ? <div className="elapsed-total">{formatDuration(timer.elapsedMs / 1000)} / {formatDuration(timer.totalMs / 1000)}</div> : null}
+        {!compactMode ? (
+          <>
+            <div className="elapsed-total">{formatDuration(timer.elapsedMs / 1000)} / {formatDuration(timer.totalMs / 1000)}</div>
+            {timer.state === 'running' ? <div className="end-time">ends {formatLocalTime(endTime)}</div> : null}
+            {timer.state === 'scheduled' ? <div className="end-time">starts {formatLocalTime(startTime)}</div> : null}
+          </>
+        ) : null}
       </div>
 
       <div className={`linear-progress ${compactMode ? 'compact-hidden' : ''}`} aria-label={`${Math.round(progress)}% complete`}>
@@ -115,7 +135,12 @@ export default function TimerCard({
         <button type="button" className="secondary" onClick={onReset}>Reset</button>
         <button type="button" className="secondary" onClick={onDuplicate}>Duplicate</button>
         <button type="button" className="danger" onClick={onRemove}>Delete</button>
-        {timer.state === 'finished' && timer.repeatAlarm ? <button type="button" className={`danger alarm-stop-button ${alarmStopped ? 'alarm-stopped' : ''}`} aria-pressed={alarmStopped} disabled={alarmStopped} onClick={onStopAlarm}>{alarmStopped ? 'Alarm stopped' : 'Stop sound'}</button> : null}
+        {timer.state === 'finished' && timer.repeatAlarm ? (
+          <>
+            {!alarmStopped ? <span className="ringing-label" role="status">Ringing</span> : null}
+            <button type="button" className={`danger alarm-stop-button ${alarmStopped ? 'alarm-stopped' : ''}`} aria-pressed={alarmStopped} disabled={alarmStopped} onClick={onStopAlarm}>{alarmStopped ? 'Alarm stopped' : 'Stop sound'}</button>
+          </>
+        ) : null}
       </div>
 
       <div className="compact-actions">
