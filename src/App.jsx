@@ -54,6 +54,7 @@ function App() {
   const [timeDraft, setTimeDraft] = useState('');
   const [selectedTimerId, setSelectedTimerId] = useState(null);
   const [highlightedTimerId, setHighlightedTimerId] = useState(null);
+  const [stoppedAlarmIds, setStoppedAlarmIds] = useState(() => new Set());
   const [draggingTimerId, setDraggingTimerId] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
   const [reorderAnnouncement, setReorderAnnouncement] = useState('');
@@ -78,6 +79,8 @@ function App() {
   const nextRequestRef = useRef(null);
   const volumePreviewTimeoutRef = useRef(null);
   const timerCardRefs = useRef(new Map());
+  const dialogRef = useRef(null);
+  const settingsDialogRef = useRef(null);
 
   const timersById = useMemo(() => Object.fromEntries(timers.map((timer) => [timer.id, timer])), [timers]);
 
@@ -111,6 +114,34 @@ function App() {
     window.addEventListener('keydown', keyboardHandler);
     return () => window.removeEventListener('keydown', keyboardHandler);
   }, [dialogOpen, editingTimeId, selectedTimerId, settingsOpen, timersById]);
+
+  useEffect(() => {
+    const panel = dialogOpen ? dialogRef.current : settingsOpen ? settingsDialogRef.current : null;
+    if (!panel) return undefined;
+
+    const focusableSelector = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+    const focusable = () => [...panel.querySelectorAll(focusableSelector)];
+    const initialFocus = focusable()[0];
+    window.requestAnimationFrame(() => initialFocus?.focus());
+
+    const trapFocus = (event) => {
+      if (event.key !== 'Tab') return;
+      const elements = focusable();
+      if (elements.length === 0) return;
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    panel.addEventListener('keydown', trapFocus);
+    return () => panel.removeEventListener('keydown', trapFocus);
+  }, [dialogOpen, settingsOpen]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : settings.theme;
@@ -154,6 +185,11 @@ function App() {
           const remaining = Math.max(0, timer.endTime - Date.now());
           if (remaining <= 0) {
             changed = true;
+            setStoppedAlarmIds((currentIds) => {
+              const nextIds = new Set(currentIds);
+              nextIds.delete(timer.id);
+              return nextIds;
+            });
             const endedTimer = {
               ...timer,
               elapsedMs: timer.totalMs,
@@ -522,6 +558,11 @@ function App() {
 
   function startTimer(timerId) {
     stopAlarm(timerId);
+    setStoppedAlarmIds((currentIds) => {
+      const nextIds = new Set(currentIds);
+      nextIds.delete(timerId);
+      return nextIds;
+    });
     setTimers((current) => current.map((timer) => {
       if (timer.id !== timerId) return timer;
       const remainingMs = timer.totalMs - timer.elapsedMs;
@@ -544,12 +585,27 @@ function App() {
 
   function resetTimer(timerId) {
     stopAlarm(timerId);
+    setStoppedAlarmIds((currentIds) => {
+      const nextIds = new Set(currentIds);
+      nextIds.delete(timerId);
+      return nextIds;
+    });
     setTimers((current) => current.map((timer) => (timer.id === timerId ? { ...timer, elapsedMs: 0, state: 'idle', endTime: null, finishedAt: null } : timer)));
   }
 
   function removeTimer(timerId) {
     stopAlarm(timerId);
+    setStoppedAlarmIds((currentIds) => {
+      const nextIds = new Set(currentIds);
+      nextIds.delete(timerId);
+      return nextIds;
+    });
     setTimers((current) => current.filter((timer) => timer.id !== timerId));
+  }
+
+  function handleStopAlarm(timerId) {
+    stopAlarm(timerId);
+    setStoppedAlarmIds((currentIds) => new Set(currentIds).add(timerId));
   }
 
   function moveTimer(timerId, direction) {
@@ -706,6 +762,7 @@ function App() {
                 reorderMode={settings.reorderMode}
                 selected={selectedTimerId === timer.id}
                 highlighted={highlightedTimerId === timer.id}
+                alarmStopped={stoppedAlarmIds.has(timer.id)}
                 dragging={draggingTimerId === timer.id}
                 dropTarget={dropTarget?.id === timer.id ? dropTarget.position : null}
                 editingTime={editingTimeId === timer.id}
@@ -722,7 +779,7 @@ function App() {
                 onReset={() => resetTimer(timer.id)}
                 onDuplicate={() => duplicateTimer(timer.id)}
                 onRemove={() => removeTimer(timer.id)}
-                onStopAlarm={() => stopAlarm(timer.id)}
+                onStopAlarm={() => handleStopAlarm(timer.id)}
                 onMove={(direction) => moveTimer(timer.id, direction)}
                 onDragStart={(event) => {
                   event.dataTransfer.effectAllowed = 'move';
@@ -786,7 +843,7 @@ function App() {
             if (event.target === event.currentTarget) setDialogOpen(false);
           }}
         >
-          <div className="dialog-panel">
+          <div className="dialog-panel" ref={dialogRef}>
             <form onSubmit={handleSubmit}>
               <div className="dialog-header">
                 <h2 id="timer-dialog-title">{editingId ? 'Edit timer' : 'Add timer'}</h2>
@@ -926,7 +983,7 @@ function App() {
             if (event.target === event.currentTarget) setSettingsOpen(false);
           }}
         >
-          <div className="dialog-panel settings-panel">
+          <div className="dialog-panel settings-panel" ref={settingsDialogRef}>
             <div className="dialog-header">
               <h2 id="settings-dialog-title">Settings</h2>
               <button type="button" className="close-button" onClick={() => setSettingsOpen(false)}>×</button>

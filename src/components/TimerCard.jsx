@@ -8,6 +8,7 @@ export default function TimerCard({
   reorderMode,
   selected,
   highlighted,
+  alarmStopped,
   dragging,
   dropTarget,
   editingTime,
@@ -42,7 +43,7 @@ export default function TimerCard({
       ref={cardRef}
       style={{ '--timer-color': timer.color }}
       onFocus={onFocus}
-      className={`timer-card ${timer.state} ${selected ? 'selected' : ''} ${highlighted ? 'timer-card-highlight' : ''} ${dragging ? 'dragging' : ''} ${dropTarget ? `drop-${dropTarget}` : ''}`}
+      className={`timer-card ${timer.state} ${timer.state === 'finished' && timer.repeatAlarm && !alarmStopped ? 'alarm-ringing' : ''} ${selected ? 'selected' : ''} ${highlighted ? 'timer-card-highlight' : ''} ${dragging ? 'dragging' : ''} ${dropTarget ? `drop-${dropTarget}` : ''}`}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -114,7 +115,7 @@ export default function TimerCard({
         <button type="button" className="secondary" onClick={onReset}>Reset</button>
         <button type="button" className="secondary" onClick={onDuplicate}>Duplicate</button>
         <button type="button" className="danger" onClick={onRemove}>Delete</button>
-        {timer.state === 'finished' && timer.repeatAlarm ? <button type="button" className="danger" onClick={onStopAlarm}>Stop sound</button> : null}
+        {timer.state === 'finished' && timer.repeatAlarm ? <button type="button" className={`danger alarm-stop-button ${alarmStopped ? 'alarm-stopped' : ''}`} aria-pressed={alarmStopped} disabled={alarmStopped} onClick={onStopAlarm}>{alarmStopped ? 'Alarm stopped' : 'Stop sound'}</button> : null}
       </div>
 
       <div className="compact-actions">
@@ -124,7 +125,7 @@ export default function TimerCard({
         <button type="button" className="compact-icon-button secondary" aria-label={`Reset ${timer.name}`} title="Reset" onClick={onReset}><Icon name="reset" /></button>
         <button type="button" className="compact-icon-button secondary" aria-label={`Edit ${timer.name}`} title="Edit" onClick={onOpenEditor}><Icon name="edit" /></button>
         <button type="button" className="compact-icon-button danger" aria-label={`Delete ${timer.name}`} title="Delete" onClick={onRemove}><Icon name="trash" /></button>
-        {timer.state === 'finished' && timer.repeatAlarm ? <button type="button" className="compact-icon-button danger" aria-label={`Stop sound for ${timer.name}`} title="Stop sound" onClick={onStopAlarm}>■</button> : null}
+        {timer.state === 'finished' && timer.repeatAlarm ? <button type="button" className={`compact-icon-button danger alarm-stop-button ${alarmStopped ? 'alarm-stopped' : ''}`} aria-label={alarmStopped ? `Alarm stopped for ${timer.name}` : `Stop sound for ${timer.name}`} aria-pressed={alarmStopped} title={alarmStopped ? 'Alarm stopped' : 'Stop sound'} disabled={alarmStopped} onClick={onStopAlarm}>■</button> : null}
       </div>
     </article>
   );
