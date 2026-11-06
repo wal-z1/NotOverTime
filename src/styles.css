@@ -470,6 +470,16 @@ button:active {
   font-size: 1.15rem;
 }
 
+.timer-grid.compact-mode .remaining-time.is-overtime {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.timer-grid.compact-mode .overtime-chip {
+  font-size: 0.65rem;
+  padding: 1px 5px;
+}
+
 .compact-actions {
   display: none;
   flex-wrap: wrap;
@@ -515,6 +525,10 @@ button:active {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--timer-color, var(--success)) 30%, transparent), 0 2px 6px var(--shadow);
 }
 
+.timer-card.finished.has-overtime {
+  border-color: color-mix(in srgb, var(--danger) 60%, var(--outline));
+}
+
 .timer-card.alarm-ringing {
   border-color: var(--danger);
   outline: 4px solid color-mix(in srgb, var(--danger) 80%, transparent);
@@ -547,7 +561,8 @@ button:active {
 }
 
 .ref-tag,
-.delta-chip {
+.delta-chip,
+.overtime-chip {
   display: inline-block;
   padding: 2px 6px;
   border: 1px solid var(--outline);
@@ -560,6 +575,15 @@ button:active {
 .delta-chip {
   margin-left: 6px;
   font-variant-numeric: tabular-nums;
+}
+
+.overtime-chip {
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  background: color-mix(in srgb, var(--danger) 15%, var(--surface));
+  color: var(--danger);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .end-time {
@@ -755,6 +779,26 @@ button:active {
 
 .remaining-time:hover {
   color: var(--primary);
+}
+
+.remaining-time.is-overtime {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.remaining-time.is-overtime:hover {
+  color: color-mix(in srgb, var(--danger) 80%, var(--text));
+}
+
+.timer-ring .progress.overtime {
+  stroke: var(--danger);
+}
+
+.overtime-summary {
+  color: var(--danger);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .time-editor.compact .remaining-time {

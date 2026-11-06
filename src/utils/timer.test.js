@@ -3,6 +3,8 @@ import {
   buildTimer,
   getClockRangeTimestamps,
   getTimerDeltaMs,
+  getTimerDisplay,
+  pauseTimersForPersistence,
   reconcileTimer,
   resetTimersForLoad,
   sanitizeTimer,
@@ -65,5 +67,53 @@ describe('timer time helpers', () => {
   it('creates future timers as scheduled', () => {
     const created = buildTimer({ name: 'Scheduled', totalMs: 60000, startTime: Date.now() + 60000 });
     expect(created.state).toBe('scheduled');
+  });
+
+  it('tracks additional minus/overtime when a timer finishes and time passes', () => {
+    const finishedTimer = timer({
+      state: 'finished',
+      totalMs: 30 * 60 * 1000,
+      elapsedMs: 30 * 60 * 1000,
+      finishedAt: now,
+    });
+    // 2 minutes later without stopping alarm
+    const reconciled = reconcileTimer(finishedTimer, now + 2 * 60 * 1000);
+    expect(reconciled.overtimeMs).toBe(2 * 60 * 1000);
+
+    const display = getTimerDisplay(reconciled);
+    expect(display.overtimeMs).toBe(2 * 60 * 1000);
+    expect(display.remainingMs).toBe(0);
+  });
+
+  it('freezes overtime once the alarm is stopped', () => {
+    const finishedTimer = timer({
+      state: 'finished',
+      totalMs: 30 * 60 * 1000,
+      elapsedMs: 30 * 60 * 1000,
+      finishedAt: now,
+      alarmStoppedAt: now + 135 * 1000, // stopped after 2m 15s
+    });
+    // 10 minutes later, overtime should remain frozen at 135 seconds
+    const reconciled = reconcileTimer(finishedTimer, now + 10 * 60 * 1000);
+    expect(reconciled.overtimeMs).toBe(135 * 1000);
+  });
+
+  it('preserves overtime and alarmStoppedAt in sanitizeTimer and pauseTimersForPersistence', () => {
+    const finishedTimer = {
+      ...timer({
+        state: 'finished',
+        totalMs: 15 * 60 * 1000,
+        elapsedMs: 15 * 60 * 1000,
+        finishedAt: now,
+        alarmStoppedAt: now + 60 * 1000,
+        overtimeMs: 60 * 1000,
+      }),
+    };
+    const sanitized = sanitizeTimer(finishedTimer);
+    expect(sanitized.alarmStoppedAt).toBe(now + 60 * 1000);
+    expect(sanitized.overtimeMs).toBe(60 * 1000);
+
+    const paused = pauseTimersForPersistence([sanitized], now + 120 * 1000);
+    expect(paused[0].overtimeMs).toBe(60 * 1000);
   });
 });

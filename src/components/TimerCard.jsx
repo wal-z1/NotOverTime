@@ -40,7 +40,9 @@ export default function TimerCard({
   onDrop,
   cardRef,
 }) {
-  const { remainingMs, progress, radius, circumference, offset } = getTimerDisplay(timer);
+  const { remainingMs, overtimeMs, progress, radius, circumference, offset } = getTimerDisplay(timer);
+  const overtimeSeconds = Math.round(overtimeMs / 1000);
+  const hasOvertime = timer.state === 'finished' && overtimeSeconds > 0;
 
   return (
     <article
@@ -49,7 +51,7 @@ export default function TimerCard({
       ref={cardRef}
       style={{ '--timer-color': timer.color }}
       onFocus={onFocus}
-      className={`timer-card ${timer.state} ${timer.state === 'finished' && timer.repeatAlarm && !alarmStopped ? 'alarm-ringing' : ''} ${selected ? 'selected' : ''} ${highlighted ? 'timer-card-highlight' : ''} ${dragging ? 'dragging' : ''} ${dropTarget ? `drop-${dropTarget}` : ''}`}
+      className={`timer-card ${timer.state} ${hasOvertime ? 'has-overtime' : ''} ${timer.state === 'finished' && !alarmStopped ? 'alarm-ringing' : ''} ${selected ? 'selected' : ''} ${highlighted ? 'timer-card-highlight' : ''} ${dragging ? 'dragging' : ''} ${dropTarget ? `drop-${dropTarget}` : ''}`}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -80,10 +82,10 @@ export default function TimerCard({
       </div>
 
       <div className={`timer-visual ${compactMode ? 'compact-hidden' : ''}`} style={{ '--ring-color': timer.color }}>
-        <svg viewBox="0 0 200 200" className="timer-ring" role="img" aria-label={`${timer.name} remaining ${formatDuration(remainingMs / 1000)}`}>
+        <svg viewBox="0 0 200 200" className="timer-ring" role="img" aria-label={hasOvertime ? `${timer.name} overtime -${formatDuration(overtimeSeconds)}` : `${timer.name} remaining ${formatDuration(remainingMs / 1000)}`}>
           <circle cx="100" cy="100" r="84" className="outer-ring" />
           <circle cx="100" cy="100" r={radius} className="track" />
-          <circle cx="100" cy="100" r={radius} className={`progress ${timer.state === 'idle' ? 'reset' : ''}`} strokeDasharray={circumference} strokeDashoffset={offset} />
+          <circle cx="100" cy="100" r={radius} className={`progress ${timer.state === 'idle' ? 'reset' : ''} ${hasOvertime ? 'overtime' : ''}`} strokeDasharray={circumference} strokeDashoffset={offset} />
           <line x1="100" y1="100" x2="100" y2="34" className="hand" style={{ transform: `rotate(${(timer.elapsedMs / timer.totalMs) * 360}deg)` }} />
           <circle cx="100" cy="100" r="4" className="hand-cap" />
         </svg>
@@ -107,9 +109,22 @@ export default function TimerCard({
           />
         ) : (
           <>
-            <button type="button" className="remaining-time" aria-label={`Edit ${timer.name} remaining time`} onClick={onBeginTimeEdit}>
-              {formatDuration(remainingMs / 1000)}
+            <button
+              type="button"
+              className={`remaining-time ${hasOvertime ? 'is-overtime' : ''}`}
+              aria-label={hasOvertime ? `${timer.name} overtime: -${formatDuration(overtimeSeconds)}` : `Edit ${timer.name} remaining time`}
+              onClick={onBeginTimeEdit}
+            >
+              {hasOvertime ? `-${formatDuration(overtimeSeconds)}` : formatDuration(remainingMs / 1000)}
             </button>
+            {hasOvertime ? (
+              <span
+                className="overtime-chip"
+                title={`Took ${formatDuration(overtimeSeconds)} additionally from setup time`}
+              >
+                Overtime
+              </span>
+            ) : null}
             {compareDelta !== null && compareDelta !== undefined ? (
               <span className="delta-chip" title={`Finishes ${Math.abs(Math.round(compareDelta / 1000))} seconds ${compareDelta < 0 ? `before ${compareReferenceName}` : `after ${compareReferenceName}`}`}>
                 {compareDelta < 0 ? '-' : '+'}{formatDuration(Math.abs(compareDelta) / 1000)}
@@ -119,7 +134,14 @@ export default function TimerCard({
         )}
         {!compactMode ? (
           <>
-            <div className="elapsed-total">{formatDuration(timer.elapsedMs / 1000)} / {formatDuration(timer.totalMs / 1000)}</div>
+            <div className="elapsed-total">
+              {formatDuration((timer.totalMs + (timer.state === 'finished' ? overtimeMs : 0)) / 1000)} / {formatDuration(timer.totalMs / 1000)}
+            </div>
+            {hasOvertime ? (
+              <div className="overtime-summary">
+                +{formatDuration(overtimeSeconds)} additional time
+              </div>
+            ) : null}
             {timer.state === 'running' ? <div className="end-time">ends {formatLocalTime(endTime)}</div> : null}
             {timer.state === 'scheduled' ? <div className="end-time">starts {formatLocalTime(startTime)}</div> : null}
           </>
@@ -127,30 +149,63 @@ export default function TimerCard({
       </div>
 
       <div className={`linear-progress ${compactMode ? 'compact-hidden' : ''}`} aria-label={`${Math.round(progress)}% complete`}>
-        <span className="linear-progress-fill" style={{ width: `${progress}%`, backgroundColor: timer.color }} />
+        <span
+          className={`linear-progress-fill ${hasOvertime ? 'overtime' : ''}`}
+          style={{ width: `${progress}%`, backgroundColor: hasOvertime ? 'var(--danger)' : timer.color }}
+        />
       </div>
 
       <div className={`actions-row ${compactMode ? 'compact-hidden' : ''}`}>
-        {timer.state === 'running' ? <button type="button" className="primary" onClick={onPause}>Pause</button> : <button type="button" className="primary" onClick={onStart}>{timer.state === 'finished' ? 'Restart' : 'Start'}</button>}
+        {timer.state === 'running' ? (
+          <button type="button" className="primary" onClick={onPause}>Pause</button>
+        ) : (
+          <button type="button" className="primary" onClick={onStart}>{timer.state === 'finished' ? 'Restart' : 'Start'}</button>
+        )}
         <button type="button" className="secondary" onClick={onReset}>Reset</button>
         <button type="button" className="secondary" onClick={onDuplicate}>Duplicate</button>
         <button type="button" className="danger" onClick={onRemove}>Delete</button>
-        {timer.state === 'finished' && timer.repeatAlarm ? (
+        {timer.state === 'finished' ? (
           <>
-            {!alarmStopped ? <span className="ringing-label" role="status">Ringing</span> : null}
-            <button type="button" className={`danger alarm-stop-button ${alarmStopped ? 'alarm-stopped' : ''}`} aria-pressed={alarmStopped} disabled={alarmStopped} onClick={onStopAlarm}>{alarmStopped ? 'Alarm stopped' : 'Stop sound'}</button>
+            {timer.repeatAlarm && !alarmStopped ? <span className="ringing-label" role="status">Ringing</span> : null}
+            <button
+              type="button"
+              className={`danger alarm-stop-button ${alarmStopped ? 'alarm-stopped' : ''}`}
+              aria-pressed={alarmStopped}
+              disabled={alarmStopped}
+              onClick={onStopAlarm}
+            >
+              {alarmStopped ? 'Alarm stopped' : 'Stop alarm'}
+            </button>
           </>
         ) : null}
       </div>
 
       <div className="compact-actions">
-        <button type="button" className="compact-icon-button primary" aria-label={timer.state === 'running' ? `Pause ${timer.name}` : `Start ${timer.name}`} title={timer.state === 'running' ? 'Pause' : 'Start'} onClick={timer.state === 'running' ? onPause : onStart}>
+        <button
+          type="button"
+          className="compact-icon-button primary"
+          aria-label={timer.state === 'running' ? `Pause ${timer.name}` : (timer.state === 'finished' ? `Restart ${timer.name}` : `Start ${timer.name}`)}
+          title={timer.state === 'running' ? 'Pause' : (timer.state === 'finished' ? 'Restart' : 'Start')}
+          onClick={timer.state === 'running' ? onPause : onStart}
+        >
           <Icon name={timer.state === 'running' ? 'pause' : 'play'} />
         </button>
         <button type="button" className="compact-icon-button secondary" aria-label={`Reset ${timer.name}`} title="Reset" onClick={onReset}><Icon name="reset" /></button>
         <button type="button" className="compact-icon-button secondary" aria-label={`Edit ${timer.name}`} title="Edit" onClick={onOpenEditor}><Icon name="edit" /></button>
         <button type="button" className="compact-icon-button danger" aria-label={`Delete ${timer.name}`} title="Delete" onClick={onRemove}><Icon name="trash" /></button>
-        {timer.state === 'finished' && timer.repeatAlarm ? <button type="button" className={`compact-icon-button danger alarm-stop-button ${alarmStopped ? 'alarm-stopped' : ''}`} aria-label={alarmStopped ? `Alarm stopped for ${timer.name}` : `Stop sound for ${timer.name}`} aria-pressed={alarmStopped} title={alarmStopped ? 'Alarm stopped' : 'Stop sound'} disabled={alarmStopped} onClick={onStopAlarm}>■</button> : null}
+        {timer.state === 'finished' ? (
+          <button
+            type="button"
+            className={`compact-icon-button danger alarm-stop-button ${alarmStopped ? 'alarm-stopped' : ''}`}
+            aria-label={alarmStopped ? `Alarm stopped for ${timer.name}` : `Stop alarm for ${timer.name}`}
+            aria-pressed={alarmStopped}
+            title={alarmStopped ? 'Alarm stopped' : 'Stop alarm'}
+            disabled={alarmStopped}
+            onClick={onStopAlarm}
+          >
+            ■
+          </button>
+        ) : null}
       </div>
     </article>
   );

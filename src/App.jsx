@@ -197,6 +197,7 @@ function App() {
     const reconciled = reconcileTimers(loaded);
     setTimers(reconciled);
     setTimersHydrated(true);
+    setStoppedAlarmIds(new Set(reconciled.filter((t) => t.alarmStoppedAt).map((t) => t.id)));
     reconciled.forEach((timer, index) => {
       const previous = loaded[index];
       if (previous && ['running', 'scheduled'].includes(previous.state) && timer.state === 'finished') {
@@ -232,7 +233,9 @@ function App() {
       if (event.key === `${STORAGE_PREFIX}.timers`) {
         const next = readStorage('timers', []);
         if (Array.isArray(next)) {
-          setTimers(next.filter(isValidTimer).map(sanitizeTimer).slice(0, MAX_TIMERS));
+          const sanitized = next.filter(isValidTimer).map(sanitizeTimer).slice(0, MAX_TIMERS);
+          setTimers(sanitized);
+          setStoppedAlarmIds(new Set(sanitized.filter((t) => t.alarmStoppedAt).map((t) => t.id)));
         }
       }
     };
@@ -270,7 +273,12 @@ function App() {
 
     const schedule = () => {
       cancelAnimationFrame(tickerRef.current);
-        const shouldAnimate = timers.some((timer) => timer.state === 'running' || timer.state === 'scheduled');
+      const shouldAnimate = timers.some(
+        (timer) =>
+          timer.state === 'running' ||
+          timer.state === 'scheduled' ||
+          (timer.state === 'finished' && !stoppedAlarmIds.has(timer.id) && !timer.alarmStoppedAt)
+      );
       if (shouldAnimate) {
         tickerRef.current = requestAnimationFrame(function loop() {
           tick();
@@ -294,7 +302,7 @@ function App() {
       cancelAnimationFrame(tickerRef.current);
       document.removeEventListener('visibilitychange', visibilityHandler);
     };
-  }, [timers]);
+  }, [timers, stoppedAlarmIds]);
 
   useEffect(() => {
     if (!compareOpen) return undefined;
@@ -631,6 +639,8 @@ function App() {
       endTime: timer.state === 'running' ? Date.now() + normalizedRemainingMs : null,
       state: timer.state === 'finished' ? 'paused' : timer.state,
       finishedAt: null,
+      alarmStoppedAt: null,
+      overtimeMs: 0,
       updatedAt: Date.now(),
     });
     cancelTimeEdit();
@@ -638,6 +648,7 @@ function App() {
 
   function startTimer(timerId) {
     stopAlarm(timerId);
+    finishNoticeRef.current.delete(timerId);
     setStoppedAlarmIds((currentIds) => {
       const nextIds = new Set(currentIds);
       nextIds.delete(timerId);
@@ -645,8 +656,19 @@ function App() {
     });
     setTimers((current) => current.map((timer) => {
       if (timer.id !== timerId) return timer;
-      const remainingMs = timer.totalMs - timer.elapsedMs;
-      const next = { ...timer, state: 'running', endTime: Date.now() + remainingMs, updatedAt: Date.now() };
+      const isFinished = timer.state === 'finished';
+      const elapsedMs = isFinished ? 0 : timer.elapsedMs;
+      const remainingMs = timer.totalMs - elapsedMs;
+      const next = {
+        ...timer,
+        elapsedMs,
+        state: 'running',
+        endTime: Date.now() + remainingMs,
+        finishedAt: null,
+        alarmStoppedAt: null,
+        overtimeMs: 0,
+        updatedAt: Date.now(),
+      };
       return next;
     }));
   }
@@ -673,16 +695,30 @@ function App() {
 
   function resetTimer(timerId) {
     stopAlarm(timerId);
+    finishNoticeRef.current.delete(timerId);
     setStoppedAlarmIds((currentIds) => {
       const nextIds = new Set(currentIds);
       nextIds.delete(timerId);
       return nextIds;
     });
-    setTimers((current) => current.map((timer) => (timer.id === timerId ? { ...timer, elapsedMs: 0, state: 'idle', endTime: null, finishedAt: null } : timer)));
+    setTimers((current) => current.map((timer) => (
+      timer.id === timerId
+        ? {
+            ...timer,
+            elapsedMs: 0,
+            state: 'idle',
+            endTime: null,
+            finishedAt: null,
+            alarmStoppedAt: null,
+            overtimeMs: 0,
+          }
+        : timer
+    )));
   }
 
   function removeTimer(timerId) {
     stopAlarm(timerId);
+    finishNoticeRef.current.delete(timerId);
     setStoppedAlarmIds((currentIds) => {
       const nextIds = new Set(currentIds);
       nextIds.delete(timerId);
@@ -693,7 +729,19 @@ function App() {
 
   function handleStopAlarm(timerId) {
     stopAlarm(timerId);
+    const now = Date.now();
     setStoppedAlarmIds((currentIds) => new Set(currentIds).add(timerId));
+    setTimers((current) => current.map((timer) => {
+      if (timer.id !== timerId) return timer;
+      const finishedAt = timer.finishedAt || now;
+      const overtimeMs = Math.max(0, now - finishedAt);
+      return {
+        ...timer,
+        alarmStoppedAt: now,
+        overtimeMs,
+        updatedAt: now,
+      };
+    }));
   }
 
   function moveTimer(timerId, direction) {
@@ -763,6 +811,8 @@ function App() {
   function clearAll() {
     alarmIntervalRef.current.forEach((interval) => window.clearInterval(interval));
     alarmIntervalRef.current.clear();
+    setStoppedAlarmIds(new Set());
+    finishNoticeRef.current.clear();
     setTimers([]);
     persistStorage('timers', []);
   }
@@ -903,7 +953,7 @@ function App() {
                 reorderMode={settings.reorderMode}
                 selected={selectedTimerId === timer.id}
                 highlighted={highlightedTimerId === timer.id}
-                alarmStopped={stoppedAlarmIds.has(timer.id)}
+                alarmStopped={stoppedAlarmIds.has(timer.id) || !!timer.alarmStoppedAt}
                 reference={referenceTimerId === timer.id}
                 compareDelta={referenceTimerId && referenceTimerId !== timer.id ? (() => {
                   const ref = timersById[referenceTimerId];

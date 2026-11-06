@@ -69,12 +69,16 @@ export function getVolumeDb(volume) {
 
 export function getTimerDisplay(timer) {
   const remainingMs = Math.max(0, timer.totalMs - timer.elapsedMs);
+  const overtimeMs = timer.state === 'finished'
+    ? Math.max(0, Number(timer.overtimeMs) || 0)
+    : 0;
   const progress = clamp((timer.elapsedMs / timer.totalMs) * 100, 0, 100);
   const radius = 72;
   const circumference = 2 * Math.PI * radius;
 
   return {
     remainingMs,
+    overtimeMs,
     progress,
     radius,
     circumference,
@@ -181,6 +185,8 @@ export function sanitizeTimer(timer) {
     endTime: typeof timer.endTime === 'number' ? timer.endTime : null,
     updatedAt: typeof timer.updatedAt === 'number' ? timer.updatedAt : Date.now(),
     finishedAt: typeof timer.finishedAt === 'number' ? timer.finishedAt : null,
+    alarmStoppedAt: typeof timer.alarmStoppedAt === 'number' ? timer.alarmStoppedAt : null,
+    overtimeMs: Number.isFinite(timer.overtimeMs) ? Math.max(0, Math.round(timer.overtimeMs)) : 0,
     startTime: typeof timer.startTime === 'number' ? timer.startTime : null,
     clockMode: timer.clockMode === true,
     clockFrom: typeof timer.clockFrom === 'number' ? timer.clockFrom : null,
@@ -207,20 +213,39 @@ export function buildTimer({ name, totalMs, color, sound, repeatAlarm = false, s
     clockTo,
     updatedAt: Date.now(),
     finishedAt: null,
+    alarmStoppedAt: null,
+    overtimeMs: 0,
   };
 }
 
 export function pauseTimersForPersistence(timers, now = Date.now()) {
   return timers.map((timer) => {
+    if (timer.state === 'finished') {
+      const finishedAt = timer.finishedAt || now;
+      const overtimeMs = timer.alarmStoppedAt
+        ? Math.max(0, timer.alarmStoppedAt - finishedAt)
+        : Math.max(0, now - finishedAt);
+      return {
+        ...timer,
+        finishedAt,
+        overtimeMs,
+        updatedAt: now,
+      };
+    }
     if (timer.state !== 'running' || !timer.endTime) return timer;
     const elapsedMs = clamp(timer.totalMs - Math.max(0, timer.endTime - now), 0, timer.totalMs);
     const finished = elapsedMs >= timer.totalMs;
+    const finishedAt = finished ? (timer.finishedAt || now) : null;
+    const overtimeMs = finished
+      ? (timer.alarmStoppedAt ? Math.max(0, timer.alarmStoppedAt - finishedAt) : Math.max(0, now - finishedAt))
+      : 0;
     return {
       ...timer,
       elapsedMs,
       state: finished ? 'finished' : 'paused',
       endTime: null,
-      finishedAt: finished ? (timer.finishedAt || now) : null,
+      finishedAt,
+      overtimeMs,
       updatedAt: now,
     };
   });
@@ -235,35 +260,66 @@ export function reconcileTimer(timer, now = Date.now()) {
     if (timer.startTime > now) return timer;
     const endTime = timer.startTime + timer.totalMs;
     if (endTime <= now) {
+      const finishedAt = timer.finishedAt || endTime;
+      const overtimeMs = timer.alarmStoppedAt
+        ? Math.max(0, timer.alarmStoppedAt - finishedAt)
+        : Math.max(0, now - finishedAt);
       return {
         ...timer,
         elapsedMs: timer.totalMs,
         state: 'finished',
         endTime: null,
         startTime: null,
-        finishedAt: timer.finishedAt || endTime,
+        finishedAt,
+        overtimeMs,
         updatedAt: now,
       };
     }
     return { ...timer, state: 'running', endTime, startTime: null, updatedAt: now };
   }
 
-  if (timer.state !== 'running' || typeof timer.endTime !== 'number') return timer;
-  if (timer.endTime <= now) {
+  if (timer.state === 'running' && typeof timer.endTime !== 'number') return timer;
+
+  if (timer.state === 'running') {
+    if (timer.endTime <= now) {
+      const finishedAt = timer.finishedAt || timer.endTime;
+      const overtimeMs = timer.alarmStoppedAt
+        ? Math.max(0, timer.alarmStoppedAt - finishedAt)
+        : Math.max(0, now - finishedAt);
+      return {
+        ...timer,
+        elapsedMs: timer.totalMs,
+        state: 'finished',
+        endTime: null,
+        finishedAt,
+        overtimeMs,
+        updatedAt: now,
+      };
+    }
+
     return {
       ...timer,
-      elapsedMs: timer.totalMs,
-      state: 'finished',
-      endTime: null,
-      finishedAt: timer.finishedAt || timer.endTime,
-      updatedAt: now,
+      elapsedMs: clamp(timer.totalMs - (timer.endTime - now), 0, timer.totalMs),
     };
   }
 
-  return {
-    ...timer,
-    elapsedMs: clamp(timer.totalMs - (timer.endTime - now), 0, timer.totalMs),
-  };
+  if (timer.state === 'finished') {
+    const finishedAt = timer.finishedAt || timer.updatedAt || now;
+    const overtimeMs = timer.alarmStoppedAt
+      ? Math.max(0, timer.alarmStoppedAt - finishedAt)
+      : Math.max(0, now - finishedAt);
+
+    if (timer.overtimeMs !== overtimeMs || timer.finishedAt !== finishedAt) {
+      return {
+        ...timer,
+        finishedAt,
+        overtimeMs,
+      };
+    }
+    return timer;
+  }
+
+  return timer;
 }
 
 export function reconcileTimers(timers, now = Date.now()) {
